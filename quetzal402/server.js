@@ -7,8 +7,10 @@ dotenv.config();
 
 const app = express();
 app.use(express.json());
+app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
+let vaultTotal = 0;
 const receiver = process.env.VAULT_RECEIVER_ADDRESS;
 const hasRealReceiver = typeof receiver === 'string' && /^0x[a-fA-F0-9]{40}$/.test(receiver);
 const hasCdpKeys =
@@ -40,11 +42,16 @@ async function main() {
     );
   }
 
+  app.get('/api/vault', (req, res) => {
+    res.json({ vaultTotal });
+  });
+
   app.post('/api/vault/deposit', (req, res) => {
+    vaultTotal += 1;
     res.json({
       success: true,
       message: 'The Feathered Serpent is pleased. 1 USDC added to the vault!',
-      newVaultTotal: 'Calculate this from DB',
+      vaultTotal,
     });
   });
 
