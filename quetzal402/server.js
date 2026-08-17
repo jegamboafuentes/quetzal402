@@ -1,58 +1,63 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import { createX402Server, createCdpFacilitatorClient } from '@coinbase/cdp-sdk/x402';
-import { withPayment } from '@x402/express';
+import { createX402Server } from '@coinbase/cdp-sdk/x402';
+import { paymentMiddlewareFromHTTPServer } from '@x402/express';
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
 
-// 1. Initialize the CDP Facilitator
-// This acts on your behalf to verify and settle USDC payments on Base
-const facilitator = createCdpFacilitatorClient();
+const PORT = process.env.PORT || 3000;
+const receiver = process.env.VAULT_RECEIVER_ADDRESS;
+const hasRealReceiver = typeof receiver === 'string' && /^0x[a-fA-F0-9]{40}$/.test(receiver);
+const hasCdpKeys =
+  Boolean(process.env.CDP_API_KEY_ID) &&
+  Boolean(process.env.CDP_API_KEY_SECRET) &&
+  !String(process.env.CDP_API_KEY_ID).startsWith('your_') &&
+  !String(process.env.CDP_API_KEY_SECRET).startsWith('your_');
 
-// 2. Configure the x402 Server instance
-const x402Server = createX402Server({
-  facilitator,
-  // Your vault address where the USDC will be collected
-  receiver: process.env.VAULT_RECEIVER_ADDRESS,
-});
+async function main() {
+  let payToEvmAddress;
 
-// 3. Define the pricing logic for the Vault Deposit
-// We charge 1 USDC on the Base network for every vault boost
-const vaultDepositPricing = async (req) => {
-  return {
-    amount: "1.00", 
-    currency: "USDC",
-    network: "base"
-  };
-};
+  if (hasCdpKeys && hasRealReceiver) {
+    const x402Server = await createX402Server({
+      routes: {
+        'POST /api/vault/deposit': {
+          price: '$1.00',
+          description: 'Vault boost: 1 USDC added to the prize pool',
+          networks: ['eip155:8453'],
+        },
+      },
+      payToConfig: { type: 'address', evm: receiver },
+    });
 
-// 4. Wrap the deposit endpoint with the x402 middleware
-// If the user hasn't paid, this automatically responds with HTTP 402!
-app.post(
-  '/api/vault/deposit',
-  withPayment(x402Server, vaultDepositPricing),
-  (req, res) => {
-    // If the code reaches here, the CDP Facilitator confirmed the 1 USDC payment.
-    // The proof of payment is attached to req.paymentReceipt
-    
-    const receipt = req.paymentReceipt;
-    console.log(`Vault boosted! Receipt ID: ${receipt.id}`);
-    
-    // TODO: Update your database here to increase the accumulated prize pool by $1
-    
+    app.use(paymentMiddlewareFromHTTPServer(x402Server));
+    payToEvmAddress = x402Server.payToEvmAddress;
+  } else {
+    console.warn(
+      'x402 payments are disabled until .env has real CDP_API_KEY_ID, CDP_API_KEY_SECRET, and VAULT_RECEIVER_ADDRESS.',
+    );
+  }
+
+  app.post('/api/vault/deposit', (req, res) => {
     res.json({
       success: true,
-      message: "The Feathered Serpent is pleased. 1 USDC added to the vault!",
-      newVaultTotal: "Calculate this from DB",
-      receipt: receipt.id
+      message: 'The Feathered Serpent is pleased. 1 USDC added to the vault!',
+      newVaultTotal: 'Calculate this from DB',
     });
-  }
-);
+  });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Quetzal402 Vault Server running on port ${PORT}`);
+  app.listen(PORT, () => {
+    console.log(`Quetzal402 Vault Server running on port ${PORT}`);
+    if (payToEvmAddress) {
+      console.log(`Receiving USDC on Base at ${payToEvmAddress}`);
+    }
+  });
+}
+
+main().catch((err) => {
+  console.error('Failed to start Quetzal402 Vault Server:');
+  console.error(err.message || err);
+  process.exit(1);
 });
