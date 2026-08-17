@@ -5,7 +5,6 @@
 * Use basic geometric shapes (rectangles) for the snake and food for now. */
 
 const vaultTotalEl = document.getElementById('vault-total');
-const boostBtn = document.getElementById('boost-btn');
 const statusEl = document.getElementById('status');
 
 function setVaultTotal(value) {
@@ -26,39 +25,6 @@ async function loadVault() {
     setVaultTotal(data.vaultTotal);
 }
 
-async function boostVault() {
-    boostBtn.disabled = true;
-    setStatus('Requesting vault boost...');
-
-    try {
-        const res = await fetch('/api/vault/deposit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-        });
-        const data = await res.json().catch(() => ({}));
-
-        if (res.status === 402) {
-            setStatus('Payment required: send 1 USDC on Base to boost the vault.');
-            return;
-        }
-
-        if (!res.ok) {
-            setStatus(data.error || data.message || `Boost failed (${res.status})`);
-            return;
-        }
-
-        if (data.vaultTotal != null) {
-            setVaultTotal(data.vaultTotal);
-        }
-        setStatus(data.message || 'Vault boosted.');
-    } catch (err) {
-        setStatus(err.message || 'Boost failed.');
-    } finally {
-        boostBtn.disabled = false;
-    }
-}
-
-boostBtn.addEventListener('click', boostVault);
 loadVault().catch((err) => setStatus(err.message));
 
 const config = {
@@ -180,6 +146,20 @@ function create() {
     this.input.keyboard.on('keydown-RIGHT', () => setDirection(1, 0, 'RIGHT'));
 }
 
+async function submitScore(walletAddress, score, inputLog) {
+    const res = await fetch('/api/score/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            walletAddress,
+            score,
+            inputLog,
+        }),
+    });
+    const data = await res.json().catch(() => ({}));
+    window.alert(data.message || `Score submit failed (${res.status})`);
+}
+
 function triggerGameOver(scene) {
     if (scene.isGameOver) {
         return;
@@ -191,7 +171,13 @@ function triggerGameOver(scene) {
         color: '#d4af37',
     }).setOrigin(0.5);
 
-    console.log(scene.inputLog);
+    const walletAddress = window.prompt(
+        'Enter your USDC Receiving Address to claim the prize if you win:',
+    );
+
+    submitScore(walletAddress, scene.score, scene.inputLog).catch((err) => {
+        window.alert(err.message || 'Could not submit score.');
+    });
 }
 
 function update(time, delta) {

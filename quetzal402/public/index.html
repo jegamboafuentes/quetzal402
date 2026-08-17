@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quetzal402</title>
+    <script type="importmap">
+    {
+        "imports": {
+            "ethers": "https://cdn.jsdelivr.net/npm/ethers@6.15.0/+esm",
+            "@x402/client": "./x402-client.js"
+        }
+    }
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
         body {
@@ -52,5 +60,85 @@
     </div>
     <div id="game"></div>
     <script src="game.js"></script>
+    <script type="module">
+        import { BrowserProvider } from 'ethers';
+        import { createX402Client } from '@x402/client';
+
+        const BASE_CHAIN_ID = '0x2105';
+        const boostBtn = document.getElementById('boost-btn');
+        const vaultTotalEl = document.getElementById('vault-total');
+        const statusEl = document.getElementById('status');
+
+        function setStatus(message) {
+            if (statusEl) {
+                statusEl.textContent = message;
+            }
+        }
+
+        async function ensureBaseNetwork() {
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: BASE_CHAIN_ID }],
+                });
+            } catch (err) {
+                if (err.code !== 4902) {
+                    throw err;
+                }
+                await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
+                        chainId: BASE_CHAIN_ID,
+                        chainName: 'Base',
+                        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                        rpcUrls: ['https://mainnet.base.org'],
+                        blockExplorerUrls: ['https://basescan.org'],
+                    }],
+                });
+            }
+        }
+
+        boostBtn.addEventListener('click', async () => {
+            if (!window.ethereum) {
+                setStatus('Install a browser wallet like MetaMask to boost the vault.');
+                return;
+            }
+
+            boostBtn.disabled = true;
+            setStatus('Connecting wallet...');
+
+            try {
+                await window.ethereum.request({ method: 'eth_requestAccounts' });
+                await ensureBaseNetwork();
+
+                const provider = new BrowserProvider(window.ethereum);
+                const signer = await provider.getSigner();
+                const client = await createX402Client(signer);
+
+                setStatus('Sending 1 USDC on Base...');
+                const res = await client.fetch('/api/vault/deposit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                const data = await res.json().catch(() => ({}));
+
+                if (!res.ok) {
+                    setStatus(data.error || data.message || `Boost failed (${res.status})`);
+                    return;
+                }
+
+                if (data.vaultTotal != null) {
+                    vaultTotalEl.textContent = `${Number(data.vaultTotal).toFixed(2)} USDC`;
+                } else {
+                    vaultTotalEl.textContent = 'Vault boosted';
+                }
+                setStatus(data.message || 'The vault was boosted.');
+            } catch (err) {
+                setStatus(err.shortMessage || err.message || 'Boost failed.');
+            } finally {
+                boostBtn.disabled = false;
+            }
+        });
+    </script>
 </body>
 </html>

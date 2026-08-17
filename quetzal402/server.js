@@ -55,6 +55,30 @@ async function main() {
     });
   });
 
+  app.post('/api/score/submit', (req, res) => {
+    const allTimeHighScore = 100;
+    const { walletAddress, score, inputLog } = req.body || {};
+    const finalScore = Number(score);
+
+    if (finalScore > allTimeHighScore) {
+      return res.json({
+        success: true,
+        message: 'New High Score!',
+        walletAddress,
+        score: finalScore,
+        inputLog,
+      });
+    }
+
+    return res.json({
+      success: false,
+      message: 'You did not beat the feathered serpent.',
+      walletAddress,
+      score: finalScore,
+      inputLog,
+    });
+  });
+
   app.listen(PORT, () => {
     console.log(`Quetzal402 Vault Server running on port ${PORT}`);
     if (payToEvmAddress) {
