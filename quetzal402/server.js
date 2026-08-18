@@ -37,13 +37,43 @@ const NETWORKS = {
     id: 'base',
     usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
     rpcUrl: 'https://mainnet.base.org',
+    rpcUrls: [
+      'https://mainnet.base.org',
+      'https://base-rpc.publicnode.com',
+    ],
   },
   'base-sepolia': {
     id: 'base-sepolia',
     usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-    rpcUrl: 'https://sepolia.base.org',
+    rpcUrl: 'https://base-sepolia-rpc.publicnode.com',
+    rpcUrls: [
+      'https://base-sepolia-rpc.publicnode.com',
+      'https://84532.rpc.thirdweb.com',
+      'https://sepolia.base.org',
+    ],
   },
 };
+
+async function ethCall(rpcUrl, to, data) {
+  const res = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'eth_call',
+      params: [{ to, data }, 'latest'],
+    }),
+  });
+  const payload = await res.json();
+  if (payload.error) {
+    throw new Error(payload.error.message || 'RPC error');
+  }
+  if (payload.result == null) {
+    throw new Error('RPC returned no result');
+  }
+  return payload.result;
+}
 
 function emptyLedger() {
   return {
@@ -115,24 +145,20 @@ async function getReceiverUsdc(networkId) {
 
   const network = NETWORKS[parseNetwork(networkId)];
   const paddedAddress = receiver.slice(2).toLowerCase().padStart(64, '0');
-  const res = await fetch(network.rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'eth_call',
-      params: [
-        { to: network.usdc, data: `${USDC_BALANCE_OF}${paddedAddress}` },
-        'latest',
-      ],
-    }),
-  });
-  const payload = await res.json();
-  if (!payload?.result || payload.result === '0x') {
-    throw new Error(`Could not read USDC for ${network.id}`);
+  const data = `${USDC_BALANCE_OF}${paddedAddress}`;
+  const rpcUrls = network.rpcUrls || [network.rpcUrl];
+  let lastError = null;
+
+  for (const rpcUrl of rpcUrls) {
+    try {
+      const result = await ethCall(rpcUrl, network.usdc, data);
+      return Number(BigInt(result)) / 10 ** USDC_DECIMALS;
+    } catch (err) {
+      lastError = err;
+    }
   }
-  return Number(BigInt(payload.result)) / 10 ** USDC_DECIMALS;
+
+  throw new Error(lastError?.message || `Could not read USDC for ${network.id}`);
 }
 
 async function vaultPayload(networkId) {

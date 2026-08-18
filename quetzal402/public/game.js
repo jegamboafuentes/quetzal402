@@ -10,6 +10,11 @@ const statusEl = document.getElementById('status');
 const networkSelect = document.getElementById('network-select');
 const networkBadge = document.getElementById('network-badge');
 const boostBtn = document.getElementById('boost-btn');
+const withdrawBtn = document.getElementById('withdraw-btn');
+const thunderOverlay = document.getElementById('thunder-overlay');
+
+let lastVaultState = {};
+let thunderTimer = null;
 
 function getSelectedNetwork() {
     const saved = localStorage.getItem(NETWORK_STORAGE_KEY);
@@ -58,7 +63,69 @@ function shortenAddress(address) {
     return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-function applyVaultState(data = {}) {
+function canWithdrawPrize(data = lastVaultState) {
+    const last = data.lastRecord;
+    return Boolean(last?.walletAddress) && !last.paid;
+}
+
+function canStartGame(data = lastVaultState) {
+    return Number(data.vaultTotal) > 0;
+}
+
+const START_LOCKED_MESSAGE = 'Boost the vault with USDC to start the game.';
+
+function setStartUnlocked(unlocked) {
+    for (const btn of [startBtn, restartBtn]) {
+        if (!btn) {
+            continue;
+        }
+        btn.disabled = !unlocked;
+        btn.classList.toggle('locked', !unlocked);
+        btn.title = unlocked ? '' : START_LOCKED_MESSAGE;
+    }
+
+    const onStartScreen = startBtn && !startBtn.hidden;
+    if (onStartScreen && !unlocked) {
+        setOverlayMessage(START_LOCKED_MESSAGE, 'warn');
+    } else if (onStartScreen && unlocked && overlayMessage?.textContent === START_LOCKED_MESSAGE) {
+        clearOverlayMessage();
+    }
+}
+
+function syncStartButton() {
+    setStartUnlocked(canStartGame());
+}
+
+function setWithdrawUnlocked(unlocked) {
+    if (!withdrawBtn) {
+        return;
+    }
+    withdrawBtn.disabled = !unlocked;
+    withdrawBtn.classList.toggle('unlocked', unlocked);
+    withdrawBtn.classList.toggle('locked', !unlocked);
+    withdrawBtn.title = unlocked
+        ? 'Record broken. Withdraw the prize vault.'
+        : 'Beat the current record to unlock withdraw';
+}
+
+function playThunder() {
+    if (!thunderOverlay) {
+        return;
+    }
+    thunderOverlay.classList.remove('active');
+    document.body.classList.remove('thunder-rumble');
+    void thunderOverlay.offsetWidth;
+    thunderOverlay.classList.add('active');
+    document.body.classList.add('thunder-rumble');
+    window.clearTimeout(thunderTimer);
+    thunderTimer = window.setTimeout(() => {
+        thunderOverlay.classList.remove('active');
+        document.body.classList.remove('thunder-rumble');
+    }, 1200);
+}
+
+function applyVaultState(data = {}, { celebrate } = {}) {
+    lastVaultState = data;
     if (data.vaultTotal != null) {
         setVaultTotal(data.vaultTotal);
     }
@@ -90,7 +157,22 @@ function applyVaultState(data = {}) {
         vaultAddressEl.textContent = data.receiver ? shortenAddress(data.receiver) : '';
         vaultAddressEl.title = data.receiver || '';
     }
+
+    const unlocked = canWithdrawPrize(data);
+    setWithdrawUnlocked(unlocked);
+    syncStartButton();
+    if (celebrate && (data.claimed || unlocked)) {
+        playThunder();
+        setStatus('Record broken! Withdraw Prize is unlocked.');
+    }
 }
+
+function syncWithdrawButton() {
+    setWithdrawUnlocked(canWithdrawPrize(lastVaultState));
+}
+
+window.applyVaultState = applyVaultState;
+window.syncWithdrawButton = syncWithdrawButton;
 
 async function loadVault() {
     const network = getSelectedNetwork();
@@ -102,7 +184,6 @@ async function loadVault() {
     applyVaultState(data);
 }
 
-window.applyVaultState = applyVaultState;
 window.refreshVault = () => loadVault().catch((err) => setStatus(err.message));
 
 applyNetworkTheme(getSelectedNetwork());
@@ -124,21 +205,41 @@ loadVault().catch((err) => setStatus(err.message));
 
 const overlay = document.getElementById('game-overlay');
 const overlayTitle = document.getElementById('overlay-title');
+const overlayMessage = document.getElementById('overlay-message');
 const startBtn = document.getElementById('start-btn');
 const restartBtn = document.getElementById('restart-btn');
 
+function setOverlayMessage(message, tone = 'info') {
+    if (overlayMessage) {
+        overlayMessage.textContent = message || '';
+        overlayMessage.hidden = !message;
+        overlayMessage.className = tone;
+    }
+    if (message) {
+        setStatus(message);
+    }
+}
+
+function clearOverlayMessage() {
+    setOverlayMessage('');
+}
+
 function showStartOverlay() {
     overlayTitle.textContent = 'Quetzalcoatl Approaches...';
+    clearOverlayMessage();
     startBtn.hidden = false;
     restartBtn.hidden = true;
     overlay.classList.remove('hidden');
+    syncStartButton();
 }
 
 function showRestartOverlay() {
     overlayTitle.textContent = 'Game Over';
+    clearOverlayMessage();
     startBtn.hidden = true;
     restartBtn.hidden = false;
     overlay.classList.remove('hidden');
+    syncStartButton();
 }
 
 function focusGameCanvas() {
@@ -286,6 +387,11 @@ function createSnake(scene) {
 }
 
 function startRun(scene) {
+    if (!canStartGame()) {
+        setOverlayMessage(START_LOCKED_MESSAGE, 'warn');
+        setStatus(START_LOCKED_MESSAGE);
+        return;
+    }
     createSnake(scene);
     scene.isRunning = true;
     hideOverlay();
@@ -347,7 +453,7 @@ async function submitScore(walletAddress, score, inputLog) {
         }),
     });
     const data = await res.json().catch(() => ({}));
-    applyVaultState(data);
+    applyVaultState(data, { celebrate: Boolean(data.claimed) });
     return data;
 }
 
@@ -365,19 +471,38 @@ async function triggerGameOver(scene) {
     showRestartOverlay();
 
     try {
+        const currentScore = Number(lastVaultState.currentRecord?.score) || 0;
+        if (scene.score <= currentScore) {
+            const message = currentScore === 0
+                ? 'Eat a jade stone to claim the record.'
+                : `You did not beat the current record of ${currentScore}.`;
+            setOverlayMessage(message, 'warn');
+            return;
+        }
+
         if (typeof window.getConnectedWallet !== 'function') {
             throw new Error('Wallet is not ready. Refresh and connect MetaMask.');
         }
-        const walletAddress = await window.getConnectedWallet({ request: true });
+
+        let walletAddress = null;
+        try {
+            walletAddress = await window.getConnectedWallet({ request: false });
+        } catch {
+            // Ignore silent read failures and prompt below.
+        }
+        if (!walletAddress) {
+            walletAddress = await window.getConnectedWallet({ request: true });
+        }
+
         const data = await submitScore(walletAddress, scene.score, scene.inputLog);
-        if (data.claimed && typeof window.withdrawPrize === 'function') {
-            const withdraw = await window.withdrawPrize();
-            window.alert(withdraw?.message || data.message || 'Record claimed.');
+        if (data.claimed) {
+            overlayTitle.textContent = 'Record Broken!';
+            setOverlayMessage('Withdraw Prize is unlocked.', 'success');
             return;
         }
-        window.alert(data.message || `Score submit failed.`);
+        setOverlayMessage(data.message || 'Score submitted.', 'warn');
     } catch (err) {
-        window.alert(err.shortMessage || err.message || 'Could not submit score.');
+        setOverlayMessage(err.shortMessage || err.message || 'Could not submit score.', 'error');
     }
 }
 

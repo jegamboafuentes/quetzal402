@@ -59,8 +59,88 @@
         }
         button:hover { background-color: #2a6638; }
         button:disabled {
-            opacity: 0.6;
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+        #boost-btn:disabled {
             cursor: wait;
+        }
+        #start-btn.locked,
+        #restart-btn.locked,
+        #start-btn:disabled,
+        #restart-btn:disabled {
+            opacity: 0.38;
+            filter: grayscale(0.45);
+            cursor: not-allowed;
+        }
+        #withdraw-btn.locked,
+        #withdraw-btn:disabled {
+            opacity: 0.38;
+            filter: grayscale(0.45);
+            box-shadow: none;
+        }
+        #withdraw-btn.unlocked:not(:disabled) {
+            border-color: #f4e27a;
+            color: #fff6c8;
+            background-color: #2f6b38;
+            box-shadow: 0 0 16px rgba(255, 215, 80, 0.9), 0 0 34px rgba(140, 200, 255, 0.45);
+            animation: prize-pulse 1.3s ease-in-out infinite;
+        }
+        @keyframes prize-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.04); }
+        }
+        #thunder-overlay {
+            pointer-events: none;
+            position: fixed;
+            inset: 0;
+            z-index: 40;
+            opacity: 0;
+            background: transparent;
+        }
+        #thunder-overlay.active {
+            animation: thunder-flash 1.15s ease-out;
+        }
+        @keyframes thunder-flash {
+            0%, 100% { opacity: 0; background: transparent; }
+            6% { opacity: 1; background: rgba(255, 255, 255, 0.88); }
+            12% { opacity: 0.15; background: rgba(180, 220, 255, 0.2); }
+            18% { opacity: 1; background: rgba(210, 235, 255, 0.8); }
+            28% { opacity: 0.1; }
+            42% { opacity: 0.85; background: rgba(212, 175, 55, 0.38); }
+            58% { opacity: 0; }
+        }
+        .thunder-bolt {
+            position: absolute;
+            top: 0;
+            width: 72px;
+            height: 280px;
+            opacity: 0;
+            fill: #f8fbff;
+            filter: drop-shadow(0 0 10px #fff) drop-shadow(0 0 22px #8ec8ff);
+        }
+        #thunder-overlay.active .bolt-left {
+            left: 18%;
+            animation: bolt-strike 0.5s ease-out 0.04s;
+        }
+        #thunder-overlay.active .bolt-right {
+            right: 16%;
+            animation: bolt-strike 0.55s ease-out 0.16s;
+        }
+        @keyframes bolt-strike {
+            0% { opacity: 0; transform: translateY(-50px) scaleY(0.35); }
+            18% { opacity: 1; transform: translateY(0) scaleY(1); }
+            100% { opacity: 0; transform: translateY(18px) scaleY(1); }
+        }
+        body.thunder-rumble {
+            animation: rumble 0.4s linear 2;
+        }
+        @keyframes rumble {
+            0%, 100% { transform: translate(0); }
+            20% { transform: translate(-7px, 3px); }
+            40% { transform: translate(6px, -2px); }
+            60% { transform: translate(-4px, 2px); }
+            80% { transform: translate(5px, -1px); }
         }
         #status {
             min-height: 1.4em;
@@ -131,6 +211,25 @@
             font-size: 28px;
             text-shadow: 0 0 12px rgba(212, 175, 55, 0.4);
         }
+        #overlay-message {
+            margin: 0;
+            max-width: 420px;
+            font-size: 15px;
+            line-height: 1.45;
+            color: #9ad1a8;
+        }
+        #overlay-message.warn {
+            color: #f0c674;
+        }
+        #overlay-message.success {
+            color: #9ad1a8;
+        }
+        #overlay-message.error {
+            color: #e08a8a;
+        }
+        #overlay-message[hidden] {
+            display: none;
+        }
         .ledger-board {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -185,12 +284,21 @@
     </style>
 </head>
 <body>
+    <div id="thunder-overlay" aria-hidden="true">
+        <svg class="thunder-bolt bolt-left" viewBox="0 0 64 240" xmlns="http://www.w3.org/2000/svg">
+            <polygon points="36,0 12,92 28,92 8,240 52,108 34,108 56,0"/>
+        </svg>
+        <svg class="thunder-bolt bolt-right" viewBox="0 0 64 240" xmlns="http://www.w3.org/2000/svg">
+            <polygon points="28,0 48,88 32,88 56,240 16,112 32,112 8,0"/>
+        </svg>
+    </div>
     <h1>Quetzal402: The Feathered Ledger</h1>
     <div id="game-wrap">
         <div id="game"></div>
         <div id="game-overlay">
             <p id="overlay-title">Quetzalcoatl Approaches...</p>
-            <button id="start-btn" type="button">Start</button>
+            <p id="overlay-message" hidden></p>
+            <button id="start-btn" type="button" class="locked" disabled title="Boost the vault with USDC to start the game.">Start</button>
             <button id="restart-btn" type="button" hidden>Restart</button>
         </div>
     </div>
@@ -219,7 +327,7 @@
             <label for="deposit-amount">USDC</label>
             <input type="number" id="deposit-amount" value="1" min="1" step="1">
             <button id="boost-btn" type="button">Boost Vault (1 Testnet USDC)</button>
-            <button id="withdraw-btn" type="button">Withdraw Prize</button>
+            <button id="withdraw-btn" type="button" class="locked" disabled title="Beat the current record to unlock withdraw">Withdraw Prize</button>
         </div>
         <p id="status"></p>
     </div>
@@ -232,6 +340,7 @@
             createX402Client,
             depositUrl,
             ensureWalletOnNetwork,
+            getNetworkRpcUrls,
             getSelectedNetwork,
         } from '@x402/client';
 
@@ -281,6 +390,20 @@
             return Math.floor(parsed);
         }
 
+        async function readUsdcBalance(address, networkId) {
+            const network = NETWORKS[networkId];
+            let lastError = null;
+            for (const rpcUrl of getNetworkRpcUrls(networkId)) {
+                try {
+                    const rpc = new JsonRpcProvider(rpcUrl);
+                    return await new Contract(network.usdc, USDC_ABI, rpc).balanceOf(address);
+                } catch (err) {
+                    lastError = err;
+                }
+            }
+            throw lastError || new Error(`Could not read USDC on ${network.name}.`);
+        }
+
         async function refreshWalletBalance({ request = false } = {}) {
             if (!window.ethereum) {
                 setWalletUi(null, 'No wallet');
@@ -296,27 +419,13 @@
             }
 
             const networkId = getSelectedNetwork();
-            const network = NETWORKS[networkId];
             const address = accounts[0];
-            let raw;
-
-            try {
-                const rpc = new JsonRpcProvider(network.rpcUrl);
-                raw = await new Contract(network.usdc, USDC_ABI, rpc).balanceOf(address);
-            } catch {
-                const walletProvider = new BrowserProvider(window.ethereum);
-                const walletNetwork = await walletProvider.getNetwork();
-                if (Number(walletNetwork.chainId) !== network.chainId) {
-                    throw new Error(`Switch MetaMask to ${network.name} to see wallet USDC.`);
-                }
-                raw = await new Contract(network.usdc, USDC_ABI, walletProvider).balanceOf(address);
-            }
-
+            const raw = await readUsdcBalance(address, networkId);
             setWalletUi(address, `${Number(formatUnits(raw, 6)).toFixed(2)} USDC`);
             return address;
         }
 
-        async function getConnectedWallet({ request = true } = {}) {
+        async function getConnectedWallet({ request = false } = {}) {
             const address = await refreshWalletBalance({ request });
             if (!address) {
                 throw new Error('Connect your wallet first.');
@@ -399,6 +508,7 @@
             });
             window.ethereum.on?.('chainChanged', () => {
                 refreshWalletBalance().catch(() => {});
+                window.refreshVault?.();
             });
         }
 
@@ -478,8 +588,10 @@
             } catch (err) {
                 setStatus(err.shortMessage || err.message || 'Withdraw failed.');
             } finally {
-                withdrawBtn.disabled = false;
-                withdrawBtn.textContent = idleLabel;
+                withdrawBtn.textContent = 'Withdraw Prize';
+                if (typeof window.syncWithdrawButton === 'function') {
+                    window.syncWithdrawButton();
+                }
             }
         });
     </script>

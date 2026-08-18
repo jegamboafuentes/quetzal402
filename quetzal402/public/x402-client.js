@@ -15,6 +15,10 @@ export const NETWORKS = {
         statusText: 'Sending 1 USDC on Base Mainnet...',
         usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
         rpcUrl: 'https://mainnet.base.org',
+        rpcUrls: [
+            'https://mainnet.base.org',
+            'https://base-rpc.publicnode.com',
+        ],
         explorer: 'https://basescan.org',
     },
     'base-sepolia': {
@@ -26,10 +30,20 @@ export const NETWORKS = {
         buttonText: 'Boost Vault (1 Testnet USDC)',
         statusText: 'Sending 1 Testnet USDC on Base Sepolia...',
         usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-        rpcUrl: 'https://sepolia.base.org',
+        rpcUrl: 'https://base-sepolia-rpc.publicnode.com',
+        rpcUrls: [
+            'https://base-sepolia-rpc.publicnode.com',
+            'https://84532.rpc.thirdweb.com',
+            'https://sepolia.base.org',
+        ],
         explorer: 'https://sepolia.basescan.org',
     },
 };
+
+export function getNetworkRpcUrls(networkId) {
+    const network = NETWORKS[networkId] || NETWORKS['base-sepolia'];
+    return network.rpcUrls || [network.rpcUrl];
+}
 
 export function getSelectedNetwork() {
     try {
@@ -51,6 +65,10 @@ export function setSelectedNetwork(networkId) {
 
 export async function ensureWalletOnNetwork(ethereum, networkId) {
     const network = NETWORKS[networkId] || NETWORKS['base-sepolia'];
+    const currentChainId = await ethereum.request({ method: 'eth_chainId' });
+    if (String(currentChainId).toLowerCase() === network.chainIdHex.toLowerCase()) {
+        return;
+    }
 
     try {
         await ethereum.request({
