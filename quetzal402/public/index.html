@@ -33,7 +33,7 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
 </head>
-<body>
+<body data-network="base">
     <div id="thunder-overlay" aria-hidden="true">
         <svg class="thunder-bolt bolt-left" viewBox="0 0 64 240" xmlns="http://www.w3.org/2000/svg">
             <polygon points="36,0 12,92 28,92 8,240 52,108 34,108 56,0"/>
@@ -54,27 +54,13 @@
                 </div>
             </div>
             <div class="header-meta">
-                <span id="network-badge" class="network-badge testnet">Testnet</span>
+                <span id="network-badge" class="network-badge mainnet">Mainnet</span>
             </div>
         </header>
         <div class="frieze frieze-thin" aria-hidden="true"></div>
 
         <main class="temple">
-            <section class="arena">
-                <div class="stage-frame" id="game-wrap">
-                    <div class="hud-score">SCORE <span id="hud-score">0</span></div>
-                    <div id="game"></div>
-                    <div id="game-overlay">
-                        <p id="overlay-title">Quetzalcoatl Approaches...</p>
-                        <p id="overlay-message" hidden></p>
-                        <button id="start-btn" type="button" class="locked" disabled title="Boost the vault with USDC to start the game.">Start</button>
-                        <button id="restart-btn" type="button" hidden>Restart</button>
-                    </div>
-                </div>
-                <p class="swipe-hint">Swipe on the board to steer. Page scroll stays off the canvas.</p>
-            </section>
-
-            <section class="altar">
+            <div class="sidebar-left">
                 <article class="stone-card record-panel">
                     <p class="panel-kicker">Temple Record</p>
                     <div class="record-card" id="record-card">
@@ -101,39 +87,61 @@
                         </div>
                     </div>
                 </article>
+                <img
+                    class="quetzal-sidebar-art"
+                    src="assets/quetzal402(1).png"
+                    alt="Quetzalcoatl, the feathered serpent"
+                    width="500"
+                    height="500"
+                >
+            </div>
 
-                <article class="stone-card wallet-panel">
-                    <p class="panel-kicker">Offering Altar</p>
-                    <div class="vault-hero" id="vault-hero">
-                        <p class="panel-kicker">Prize Vault</p>
-                        <span class="vault-value" id="vault-total">0.00 USDC</span>
-                        <p class="vault-hero-sub">Boost to fill it. Beat the record to claim it.</p>
+            <section class="arena">
+                <div class="stage-frame" id="game-wrap">
+                    <div class="hud-score">SCORE <span id="hud-score">0</span></div>
+                    <div id="game"></div>
+                    <div id="game-overlay">
+                        <p id="overlay-title">Quetzalcoatl Approaches...</p>
+                        <p id="overlay-message" hidden></p>
+                        <button id="start-btn" type="button" class="locked" disabled title="Boost the vault with USDC to start the game.">Start</button>
+                        <button id="restart-btn" type="button" hidden>Restart</button>
                     </div>
-                    <p class="lore">
-                        Pay USDC into the shared prize vault, then guide Quetzalcoatl through jade stones.
-                        Beat the live record to unlock withdraw to your wallet.
-                    </p>
-                    <div class="wallet-row">
-                        <span class="wallet-balance" id="wallet-balance">Not connected</span>
-                        <a class="wallet-address" id="wallet-address" target="_blank" rel="noopener noreferrer"></a>
-                        <button id="wallet-connect-btn" type="button">Connect Wallet</button>
-                    </div>
-                    <div class="network-row">
-                        <label for="network-select">Network</label>
-                        <select id="network-select" class="network-select">
-                            <option value="base-sepolia">Base Sepolia Testnet</option>
-                            <option value="base">Base Mainnet (Real USDC)</option>
-                        </select>
-                    </div>
-                    <div class="boost-row">
-                        <label for="deposit-amount">USDC</label>
-                        <input type="number" id="deposit-amount" value="1" min="1" step="1">
-                        <button id="boost-btn" class="btn-primary" type="button">Boost Vault (1 Testnet USDC)</button>
-                        <button id="withdraw-btn" type="button" class="locked" disabled title="Beat the current record to unlock withdraw">Withdraw Prize</button>
-                    </div>
-                    <p id="status" class="status-ticker">Connect a wallet and boost the vault to begin.</p>
-                </article>
+                </div>
+                <p class="swipe-hint">Swipe on the board to steer. Page scroll stays off the canvas.</p>
             </section>
+
+            <article class="stone-card wallet-panel">
+                <p class="panel-kicker">Offering Altar</p>
+                <div class="vault-hero" id="vault-hero">
+                    <p class="panel-kicker">Prize Vault</p>
+                    <span class="vault-value" id="vault-total">0.00 USDC</span>
+                    <p class="vault-hero-sub">Boost to fill it. Beat the record to claim it.</p>
+                </div>
+                <p class="lore">
+                    Pay USDC into the shared prize vault, then guide Quetzalcoatl through jade stones.
+                    Beat the live record to unlock withdraw to your wallet.
+                </p>
+                <div class="wallet-row">
+                    <span class="wallet-balance" id="wallet-balance">Not connected</span>
+                    <a class="wallet-address" id="wallet-address" target="_blank" rel="noopener noreferrer"></a>
+                    <button id="wallet-connect-btn" type="button">Connect Wallet</button>
+                </div>
+                <div class="network-row">
+                    <label for="network-select">Network</label>
+                    <select id="network-select" class="network-select">
+                        <option value="base" selected>Mainnet (Base) — Real USDC</option>
+                        <option value="base-sepolia">Testnet (Base Sepolia) — Fake USDC</option>
+                    </select>
+                </div>
+                <p id="network-warning" class="network-warning mainnet">REAL USDC on Base Mainnet. Boosts spend actual funds.</p>
+                <div class="boost-row">
+                    <label for="deposit-amount">USDC</label>
+                    <input type="number" id="deposit-amount" value="1" min="1" step="1">
+                    <button id="boost-btn" class="btn-primary" type="button">Boost Vault (1 USDC)</button>
+                    <button id="withdraw-btn" type="button" class="locked" disabled title="Beat the current record to unlock withdraw">Withdraw Prize</button>
+                </div>
+                <p id="status" class="status-ticker">Connect a wallet and boost the vault to begin.</p>
+            </article>
         </main>
 
         <footer class="credits-bar">
@@ -290,8 +298,9 @@
         }
 
         async function connectWallet() {
+            await ensureWalletOnNetwork(window.ethereum, getSelectedNetwork());
             const address = await getConnectedWallet({ request: true });
-            setStatus(`Connected ${shortenAddress(address)}`);
+            setStatus(`Connected ${shortenAddress(address)} on ${NETWORKS[getSelectedNetwork()].name}`);
             return address;
         }
 
@@ -350,6 +359,11 @@
 
         networkSelect?.addEventListener('change', () => {
             setSelectedNetwork(networkSelect.value);
+            if (window.ethereum) {
+                ensureWalletOnNetwork(window.ethereum, networkSelect.value).catch((err) => {
+                    setStatus(err.shortMessage || err.message || 'Could not switch wallet network.');
+                });
+            }
             refreshWalletBalance({ quiet: true }).catch(() => {});
             window.refreshVault?.();
         });

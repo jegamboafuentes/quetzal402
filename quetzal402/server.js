@@ -162,9 +162,9 @@ const X402_NETWORKS = {
 
 function parseNetwork(rawNetwork) {
   const raw = String(
-    rawNetwork || process.env.DEFAULT_X402_NETWORK || 'base-sepolia',
+    rawNetwork || process.env.DEFAULT_X402_NETWORK || 'base',
   ).toLowerCase();
-  return NETWORKS[raw] ? raw : 'base-sepolia';
+  return NETWORKS[raw] ? raw : 'base';
 }
 
 async function loadLedgers() {
@@ -363,9 +363,9 @@ function vaultDepositPricing(req) {
     req.query?.network ||
       req.get?.('x-payment-network') ||
       process.env.DEFAULT_X402_NETWORK ||
-      'base-sepolia',
+      'base',
   ).toLowerCase();
-  const network = X402_NETWORKS[raw] ? raw : 'base-sepolia';
+  const network = X402_NETWORKS[raw] ? raw : 'base';
   const config = X402_NETWORKS[network];
   const amount = parseDepositAmount(req.body?.amount);
 

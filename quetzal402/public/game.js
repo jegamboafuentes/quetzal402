@@ -29,7 +29,10 @@ let thunderTimer = null;
 
 function getSelectedNetwork() {
     const saved = localStorage.getItem(NETWORK_STORAGE_KEY);
-    return saved === 'base' ? 'base' : 'base-sepolia';
+    if (saved === 'base-sepolia') {
+        return 'base-sepolia';
+    }
+    return 'base';
 }
 
 function persistNetwork(networkId) {
@@ -64,6 +67,13 @@ function applyNetworkTheme(networkId) {
     if (networkBadge) {
         networkBadge.textContent = isMainnet ? 'Mainnet' : 'Testnet';
         networkBadge.className = `network-badge ${isMainnet ? 'mainnet' : 'testnet'}`;
+    }
+    const warningEl = document.getElementById('network-warning');
+    if (warningEl) {
+        warningEl.textContent = isMainnet
+            ? 'REAL USDC on Base Mainnet. Boosts spend actual funds.'
+            : 'Base Sepolia testnet. No real USDC is spent.';
+        warningEl.className = `network-warning ${isMainnet ? 'mainnet' : 'testnet'}`;
     }
     if (boostBtn) {
         boostBtn.textContent = isMainnet

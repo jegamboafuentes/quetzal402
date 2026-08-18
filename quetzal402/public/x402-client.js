@@ -42,12 +42,12 @@ export const NETWORKS = {
 };
 
 export function getNetworkRpcUrls(networkId) {
-    const network = NETWORKS[networkId] || NETWORKS['base-sepolia'];
+    const network = NETWORKS[networkId] || NETWORKS.base;
     return network.rpcUrls || [network.rpcUrl];
 }
 
 export function getExplorerAddressUrl(networkId, address) {
-    const network = NETWORKS[networkId] || NETWORKS['base-sepolia'];
+    const network = NETWORKS[networkId] || NETWORKS.base;
     if (!address) {
         return network.explorer;
     }
@@ -79,7 +79,7 @@ async function verifyRpcChain(rpcUrl, expectedChainId) {
 }
 
 export async function readUsdcBalanceFromRpc(address, networkId) {
-    const network = NETWORKS[networkId] || NETWORKS['base-sepolia'];
+    const network = NETWORKS[networkId] || NETWORKS.base;
     const paddedAddress = address.slice(2).toLowerCase().padStart(64, '0');
     const callData = `0x70a08231${paddedAddress}`;
     let lastError = null;
@@ -104,19 +104,19 @@ export function getSelectedNetwork() {
             return saved;
         }
     } catch {
-        // Ignore storage errors and fall back to testnet.
+        // Ignore storage errors and fall back to mainnet.
     }
-    return 'base-sepolia';
+    return 'base';
 }
 
 export function setSelectedNetwork(networkId) {
-    const id = NETWORKS[networkId] ? networkId : 'base-sepolia';
+    const id = NETWORKS[networkId] ? networkId : 'base';
     localStorage.setItem(NETWORK_STORAGE_KEY, id);
     return id;
 }
 
 export async function ensureWalletOnNetwork(ethereum, networkId) {
-    const network = NETWORKS[networkId] || NETWORKS['base-sepolia'];
+    const network = NETWORKS[networkId] || NETWORKS.base;
     const currentChainId = await ethereum.request({ method: 'eth_chainId' });
     if (String(currentChainId).toLowerCase() === network.chainIdHex.toLowerCase()) {
         return;
@@ -171,7 +171,7 @@ export async function createX402Client(ethersSigner) {
 }
 
 export function depositUrl(networkId) {
-    const network = NETWORKS[networkId] ? networkId : 'base-sepolia';
+    const network = NETWORKS[networkId] ? networkId : 'base';
     return `/api/vault/deposit?network=${encodeURIComponent(network)}`;
 }
 
