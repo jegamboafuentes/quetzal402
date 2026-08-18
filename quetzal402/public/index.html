@@ -2,8 +2,27 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quetzal402</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Quetzal402: The Feathered Ledger</title>
+    <meta name="description" content="An Aztec-themed Web3 arcade ledger game powered by x402.">
+    <meta name="theme-color" content="#0A0E0D">
+
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Quetzal402: The Feathered Ledger">
+    <meta property="og:description" content="Play, beat the record, and claim the prize vault on-chain.">
+    <meta property="og:image" content="https://raw.githubusercontent.com/jegamboafuentes/quetzal402/main/quetzal402/public/assets/quetzal402(2).png">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Quetzal402: The Feathered Ledger">
+    <meta name="twitter:description" content="Play, beat the record, and claim the prize vault on-chain.">
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/jegamboafuentes/quetzal402/main/quetzal402/public/assets/quetzal402(2).png">
+
+    <link rel="icon" type="image/png" href="assets/quetzal402(2).png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Press+Start+2P&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+
     <script type="importmap">
     {
         "imports": {
@@ -13,283 +32,6 @@
     }
     </script>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
-    <style>
-        html, body {
-            margin: 0;
-            height: 100%;
-            overflow: hidden;
-        }
-        body {
-            background-color: #0b0f12;
-            color: #d4af37;
-            text-align: center;
-            font-family: 'Courier New', Courier, monospace;
-            padding: 8px 12px 10px;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        h1 {
-            font-size: 22px;
-            margin: 0 0 8px;
-        }
-        canvas {
-            border: 4px solid #d4af37;
-            box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
-            display: block;
-        }
-        #game-wrap {
-            position: relative;
-            display: inline-block;
-            flex: 0 0 auto;
-            width: 640px;
-            max-width: 100%;
-            min-height: 480px;
-        }
-        #game {
-            width: 640px;
-            max-width: 100%;
-            min-height: 480px;
-        }
-        .ui-container {
-            margin-top: 8px;
-            width: min(640px, 100%);
-        }
-        button {
-            background-color: #1f4d29;
-            color: #d4af37;
-            border: 2px solid #d4af37;
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        button:hover { background-color: #2a6638; }
-        button:disabled {
-            opacity: 0.55;
-            cursor: not-allowed;
-        }
-        #boost-btn:disabled {
-            cursor: wait;
-        }
-        #start-btn.locked,
-        #restart-btn.locked,
-        #start-btn:disabled,
-        #restart-btn:disabled {
-            opacity: 0.38;
-            filter: grayscale(0.45);
-            cursor: not-allowed;
-        }
-        #withdraw-btn.locked,
-        #withdraw-btn:disabled {
-            opacity: 0.38;
-            filter: grayscale(0.45);
-            box-shadow: none;
-        }
-        #withdraw-btn.unlocked:not(:disabled) {
-            border-color: #f4e27a;
-            color: #fff6c8;
-            background-color: #2f6b38;
-            box-shadow: 0 0 16px rgba(255, 215, 80, 0.9), 0 0 34px rgba(140, 200, 255, 0.45);
-            animation: prize-pulse 1.3s ease-in-out infinite;
-        }
-        @keyframes prize-pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.04); }
-        }
-        #thunder-overlay {
-            pointer-events: none;
-            position: fixed;
-            inset: 0;
-            z-index: 40;
-            opacity: 0;
-            background: transparent;
-        }
-        #thunder-overlay.active {
-            animation: thunder-flash 1.15s ease-out;
-        }
-        @keyframes thunder-flash {
-            0%, 100% { opacity: 0; background: transparent; }
-            6% { opacity: 1; background: rgba(255, 255, 255, 0.88); }
-            12% { opacity: 0.15; background: rgba(180, 220, 255, 0.2); }
-            18% { opacity: 1; background: rgba(210, 235, 255, 0.8); }
-            28% { opacity: 0.1; }
-            42% { opacity: 0.85; background: rgba(212, 175, 55, 0.38); }
-            58% { opacity: 0; }
-        }
-        .thunder-bolt {
-            position: absolute;
-            top: 0;
-            width: 72px;
-            height: 280px;
-            opacity: 0;
-            fill: #f8fbff;
-            filter: drop-shadow(0 0 10px #fff) drop-shadow(0 0 22px #8ec8ff);
-        }
-        #thunder-overlay.active .bolt-left {
-            left: 18%;
-            animation: bolt-strike 0.5s ease-out 0.04s;
-        }
-        #thunder-overlay.active .bolt-right {
-            right: 16%;
-            animation: bolt-strike 0.55s ease-out 0.16s;
-        }
-        @keyframes bolt-strike {
-            0% { opacity: 0; transform: translateY(-50px) scaleY(0.35); }
-            18% { opacity: 1; transform: translateY(0) scaleY(1); }
-            100% { opacity: 0; transform: translateY(18px) scaleY(1); }
-        }
-        body.thunder-rumble {
-            animation: rumble 0.4s linear 2;
-        }
-        @keyframes rumble {
-            0%, 100% { transform: translate(0); }
-            20% { transform: translate(-7px, 3px); }
-            40% { transform: translate(6px, -2px); }
-            60% { transform: translate(-4px, 2px); }
-            80% { transform: translate(5px, -1px); }
-        }
-        #status {
-            min-height: 1.4em;
-            margin-top: 8px;
-            color: #9ad1a8;
-        }
-        .network-bar {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin: 6px 0;
-        }
-        .network-select {
-            background-color: #101816;
-            color: #d4af37;
-            border: 2px solid #d4af37;
-            padding: 8px 12px;
-            font-family: inherit;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .network-badge {
-            display: inline-block;
-            min-width: 92px;
-            padding: 6px 12px;
-            border: 2px solid currentColor;
-            font-size: 12px;
-            font-weight: bold;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-        }
-        .network-badge.testnet {
-            color: #3cb371;
-            box-shadow: 0 0 14px rgba(60, 179, 113, 0.55);
-        }
-        .network-badge.mainnet {
-            color: #d4af37;
-            box-shadow: 0 0 16px rgba(212, 175, 55, 0.7);
-        }
-        body[data-network="base"] canvas {
-            border-color: #d4af37;
-        }
-        body[data-network="base-sepolia"] canvas {
-            border-color: #3cb371;
-        }
-        #game-overlay {
-            position: absolute;
-            left: 0;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 16px;
-            background: rgba(11, 15, 18, 0.78);
-            z-index: 3;
-        }
-        #game-overlay.hidden {
-            display: none;
-        }
-        #overlay-title {
-            margin: 0;
-            font-size: 28px;
-            text-shadow: 0 0 12px rgba(212, 175, 55, 0.4);
-        }
-        #overlay-message {
-            margin: 0;
-            max-width: 420px;
-            font-size: 15px;
-            line-height: 1.45;
-            color: #9ad1a8;
-        }
-        #overlay-message.warn {
-            color: #f0c674;
-        }
-        #overlay-message.success {
-            color: #9ad1a8;
-        }
-        #overlay-message.error {
-            color: #e08a8a;
-        }
-        #overlay-message[hidden] {
-            display: none;
-        }
-        .ledger-board {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4px 18px;
-            margin: 6px 0 8px;
-            padding: 8px 12px;
-            border: 1px solid rgba(212, 175, 55, 0.45);
-            text-align: left;
-            font-size: 13px;
-        }
-        .ledger-board p {
-            margin: 0;
-        }
-        #last-collector {
-            font-size: 12px;
-            word-break: break-all;
-        }
-        .boost-row {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-top: 6px;
-        }
-        .wallet-bar {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin: 4px 0 6px;
-        }
-        #wallet-address {
-            font-size: 13px;
-        }
-        #wallet-connect-btn {
-            padding: 6px 14px;
-            font-size: 14px;
-        }
-        #deposit-amount {
-            width: 72px;
-            background-color: #101816;
-            color: #d4af37;
-            border: 2px solid #d4af37;
-            padding: 8px 10px;
-            font-family: inherit;
-            font-size: 16px;
-            font-weight: bold;
-            text-align: center;
-        }
-    </style>
 </head>
 <body>
     <div id="thunder-overlay" aria-hidden="true">
@@ -300,54 +42,117 @@
             <polygon points="28,0 48,88 32,88 56,240 16,112 32,112 8,0"/>
         </svg>
     </div>
-    <h1>Quetzal402: The Feathered Ledger</h1>
-    <div id="game-wrap">
-        <div id="game"></div>
-        <div id="game-overlay">
-            <p id="overlay-title">Quetzalcoatl Approaches...</p>
-            <p id="overlay-message" hidden></p>
-            <button id="start-btn" type="button" class="locked" disabled title="Boost the vault with USDC to start the game.">Start</button>
-            <button id="restart-btn" type="button" hidden>Restart</button>
-        </div>
+
+    <div class="app">
+        <div class="frieze" aria-hidden="true"></div>
+        <header class="app-header">
+            <div class="brand">
+                <img class="brand-logo" src="assets/quetzal402(2).png" alt="Quetzal402 feathered serpent logo">
+                <div class="brand-copy">
+                    <h1>Quetzal402: The Feathered Ledger</h1>
+                    <p>Boost the vault. Break the record. Claim the prize on-chain.</p>
+                </div>
+            </div>
+            <div class="header-meta">
+                <span id="network-badge" class="network-badge testnet">Testnet</span>
+            </div>
+        </header>
+        <div class="frieze frieze-thin" aria-hidden="true"></div>
+
+        <main class="temple">
+            <section class="arena">
+                <div class="stage-frame" id="game-wrap">
+                    <div class="hud-score">SCORE <span id="hud-score">0</span></div>
+                    <div id="game"></div>
+                    <div id="game-overlay">
+                        <p id="overlay-title">Quetzalcoatl Approaches...</p>
+                        <p id="overlay-message" hidden></p>
+                        <button id="start-btn" type="button" class="locked" disabled title="Boost the vault with USDC to start the game.">Start</button>
+                        <button id="restart-btn" type="button" hidden>Restart</button>
+                    </div>
+                </div>
+                <p class="swipe-hint">Swipe on the board to steer. Page scroll stays off the canvas.</p>
+            </section>
+
+            <section class="altar">
+                <article class="stone-card record-panel">
+                    <p class="panel-kicker">Temple Record</p>
+                    <div class="record-card" id="record-card">
+                        <p class="panel-kicker">Current Record</p>
+                        <span class="record-value" id="current-record">0</span>
+                        <p class="record-sub">Prize vault: <span id="prize-eligible">0.00 USDC</span></p>
+                    </div>
+                    <div class="stat-grid">
+                        <div>
+                            <span class="stat-label">Last record</span>
+                            <span class="stat-value" id="last-record">—</span>
+                        </div>
+                        <div>
+                            <span class="stat-label">Last prize</span>
+                            <span class="stat-value" id="last-amount">—</span>
+                        </div>
+                        <div>
+                            <span class="stat-label">Collected by</span>
+                            <span class="stat-value" id="last-collector">—</span>
+                        </div>
+                        <div>
+                            <span class="stat-label">Vault address</span>
+                            <a class="stat-value vault-address" id="vault-address" target="_blank" rel="noopener noreferrer">—</a>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="stone-card wallet-panel">
+                    <p class="panel-kicker">Offering Altar</p>
+                    <div class="vault-hero" id="vault-hero">
+                        <p class="panel-kicker">Prize Vault</p>
+                        <span class="vault-value" id="vault-total">0.00 USDC</span>
+                        <p class="vault-hero-sub">Boost to fill it. Beat the record to claim it.</p>
+                    </div>
+                    <p class="lore">
+                        Pay USDC into the shared prize vault, then guide Quetzalcoatl through jade stones.
+                        Beat the live record to unlock withdraw to your wallet.
+                    </p>
+                    <div class="wallet-row">
+                        <span class="wallet-balance" id="wallet-balance">Not connected</span>
+                        <a class="wallet-address" id="wallet-address" target="_blank" rel="noopener noreferrer"></a>
+                        <button id="wallet-connect-btn" type="button">Connect Wallet</button>
+                    </div>
+                    <div class="network-row">
+                        <label for="network-select">Network</label>
+                        <select id="network-select" class="network-select">
+                            <option value="base-sepolia">Base Sepolia Testnet</option>
+                            <option value="base">Base Mainnet (Real USDC)</option>
+                        </select>
+                    </div>
+                    <div class="boost-row">
+                        <label for="deposit-amount">USDC</label>
+                        <input type="number" id="deposit-amount" value="1" min="1" step="1">
+                        <button id="boost-btn" class="btn-primary" type="button">Boost Vault (1 Testnet USDC)</button>
+                        <button id="withdraw-btn" type="button" class="locked" disabled title="Beat the current record to unlock withdraw">Withdraw Prize</button>
+                    </div>
+                    <p id="status" class="status-ticker">Connect a wallet and boost the vault to begin.</p>
+                </article>
+            </section>
+        </main>
+
+        <footer class="credits-bar">
+            <p><strong>Developed by</strong> <a href="https://metaverseprofessional.tech/" target="_blank" rel="noopener noreferrer">Metaverse Professional LLC</a></p>
+            <p><strong>Author</strong> Enrique Gamboa · <a href="https://enriquegamboa.info" target="_blank" rel="noopener noreferrer">enriquegamboa.info</a></p>
+            <p><strong>Repo</strong> <a href="https://github.com/jegamboafuentes/quetzal402" target="_blank" rel="noopener noreferrer">github.com/jegamboafuentes/quetzal402</a></p>
+        </footer>
     </div>
-    <div class="ui-container">
-        <div class="wallet-bar">
-            <p>Wallet: <span id="wallet-balance">Not connected</span></p>
-            <span id="wallet-address"></span>
-            <button id="wallet-connect-btn" type="button">Connect Wallet</button>
-        </div>
-        <p>Prize Vault: <span id="vault-total">0.00 USDC</span> <span id="vault-address"></span></p>
-        <div class="ledger-board">
-            <p>Current record: <span id="current-record">0</span></p>
-            <p>Last record: <span id="last-record">—</span></p>
-            <p>Amount: <span id="last-amount">—</span></p>
-            <p>Collected by: <span id="last-collector">—</span></p>
-        </div>
-        <div class="network-bar">
-            <label for="network-select">Network</label>
-            <select id="network-select" class="network-select">
-                <option value="base-sepolia">Base Sepolia Testnet</option>
-                <option value="base">Base Mainnet (Real USDC)</option>
-            </select>
-            <span id="network-badge" class="network-badge testnet">Testnet</span>
-        </div>
-        <div class="boost-row">
-            <label for="deposit-amount">USDC</label>
-            <input type="number" id="deposit-amount" value="1" min="1" step="1">
-            <button id="boost-btn" type="button">Boost Vault (1 Testnet USDC)</button>
-            <button id="withdraw-btn" type="button" class="locked" disabled title="Beat the current record to unlock withdraw">Withdraw Prize</button>
-        </div>
-        <p id="status"></p>
-    </div>
+
     <script src="game.js"></script>
     <script type="module">
-        import { BrowserProvider, Contract, formatUnits } from 'ethers';
+        import { BrowserProvider, Contract, formatUnits, parseUnits } from 'ethers';
         import {
             NETWORKS,
             USDC_ABI,
             createX402Client,
             depositUrl,
             ensureWalletOnNetwork,
+            getExplorerAddressUrl,
             getSelectedNetwork,
             readUsdcBalanceFromRpc,
             setSelectedNetwork,
@@ -385,9 +190,15 @@
             if (walletAddressEl) {
                 walletAddressEl.textContent = address ? shortenAddress(address) : '';
                 walletAddressEl.title = address || '';
+                if (address) {
+                    walletAddressEl.href = getExplorerAddressUrl(getSelectedNetwork(), address);
+                } else {
+                    walletAddressEl.removeAttribute('href');
+                }
             }
             if (walletConnectBtn) {
                 walletConnectBtn.textContent = address ? 'Disconnect' : 'Connect Wallet';
+                walletConnectBtn.classList.toggle('btn-danger', Boolean(address));
             }
         }
 
@@ -457,7 +268,7 @@
         }
 
         async function refreshBalancesAfterTx() {
-            for (const delay of [0, 2000, 5000]) {
+            for (const delay of [0, 2000, 5000, 10000, 16000]) {
                 if (delay) {
                     await new Promise((resolve) => setTimeout(resolve, delay));
                 }
@@ -558,6 +369,47 @@
             });
         }
 
+        function x402FailureMessage(data, status) {
+            return data?.errorReason
+                || data?.invalidReason
+                || data?.error
+                || data?.message
+                || (status === 402
+                    ? 'Coinbase CDP could not settle this payment. Check the 402 response in the console.'
+                    : `Boost failed (${status})`);
+        }
+
+        async function loadVaultSnapshot(networkId) {
+            const res = await fetch(`/api/vault?network=${encodeURIComponent(networkId)}`);
+            const data = await res.json().catch(() => ({}));
+            if (typeof window.applyVaultState === 'function') {
+                window.applyVaultState(data);
+            }
+            return data;
+        }
+
+        async function waitForVaultIncrease(networkId, previous, expected, timeoutMs = 20000) {
+            const target = Number(previous) + Number(expected);
+            const started = Date.now();
+            let latest = await loadVaultSnapshot(networkId);
+            while (Date.now() - started < timeoutMs) {
+                if (Number(latest.vaultTotal) + 1e-6 >= target) {
+                    return latest;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                latest = await loadVaultSnapshot(networkId);
+            }
+            return latest;
+        }
+
+        async function boostWithDirectTransfer(signer, network, amount, receiver) {
+            const usdc = new Contract(network.usdc, USDC_ABI, signer);
+            const tx = await usdc.transfer(receiver, parseUnits(String(amount), 6));
+            setStatus(`Direct USDC transfer submitted (${tx.hash.slice(0, 10)}…). Waiting for confirmation...`);
+            await tx.wait();
+            return tx.hash;
+        }
+
         boostBtn.addEventListener('click', async () => {
             if (!window.ethereum) {
                 setStatus('Install a browser wallet like MetaMask to boost the vault.');
@@ -585,33 +437,65 @@
                 }
 
                 const signer = await provider.getSigner();
-                const client = await createX402Client(signer);
+                const before = await loadVaultSnapshot(networkId);
+                const receiver = before.receiver;
+                let settled = false;
+                let userRejected = false;
 
-                setStatus(`Sending ${userAmount} ${tokenLabel} on ${network.name}...`);
-                const res = await client.fetch(depositUrl(networkId), {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-payment-network': networkId,
-                    },
-                    body: JSON.stringify({ amount: userAmount }),
-                });
-                const data = await res.json().catch(() => ({}));
+                try {
+                    const client = await createX402Client(signer);
+                    setStatus(`Approve the Coinbase CDP / x402 payment in MetaMask...`);
+                    const res = await client.fetch(depositUrl(networkId), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-payment-network': networkId,
+                        },
+                        body: JSON.stringify({ amount: userAmount }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    console.info('[x402 deposit]', res.status, data);
 
-                if (!res.ok) {
-                    setStatus(data.error || data.message || `Boost failed (${res.status})`);
-                    return;
+                    if (!res.ok) {
+                        setStatus(x402FailureMessage(data, res.status));
+                    } else if (typeof window.applyVaultState === 'function') {
+                        window.applyVaultState(data);
+                    }
+
+                    if (res.ok) {
+                        setStatus('Coinbase CDP is settling USDC into the vault...');
+                        const after = await waitForVaultIncrease(networkId, Number(before.vaultTotal) || 0, userAmount);
+                        if (Number(after.vaultTotal) + 1e-6 >= (Number(before.vaultTotal) || 0) + userAmount) {
+                            settled = true;
+                            setStatus(`The Feathered Serpent is pleased. ${userAmount} ${tokenLabel} added to the vault!`);
+                        }
+                    }
+                } catch (err) {
+                    console.warn('[x402 deposit] failed', err);
+                    const message = err.shortMessage || err.message || '';
+                    if (err.code === 4001 || /reject|denied/i.test(message)) {
+                        userRejected = true;
+                        throw err;
+                    }
+                    setStatus(message || 'x402 payment failed.');
                 }
 
-                if (typeof window.applyVaultState === 'function') {
-                    window.applyVaultState(data);
+                if (!settled && !userRejected && receiver) {
+                    setStatus('CDP settlement did not land. Sending USDC directly from your wallet to the vault...');
+                    await boostWithDirectTransfer(signer, network, userAmount, receiver);
+                    const afterDirect = await waitForVaultIncrease(networkId, Number(before.vaultTotal) || 0, userAmount, 30000);
+                    if (Number(afterDirect.vaultTotal) + 1e-6 >= (Number(before.vaultTotal) || 0) + userAmount) {
+                        setStatus(`Vault boosted with ${userAmount} ${tokenLabel} via direct transfer.`);
+                    } else {
+                        throw new Error('USDC was sent, but the vault balance has not updated yet. Wait a few seconds and refresh.');
+                    }
                 }
+
                 await refreshWalletBalance();
                 refreshBalancesAfterTx().catch(() => {});
-                setStatus(data.message || 'The vault was boosted.');
             } catch (err) {
                 const message = err.shortMessage || err.message || 'Boost failed.';
-                setStatus(message.includes('revert') ? 'Boost failed. Check MetaMask is connected to Base Sepolia.' : message);
+                setStatus(message.includes('revert') ? 'Boost failed. Check MetaMask is connected to Base Sepolia and has USDC.' : message);
             } finally {
                 boostBtn.disabled = false;
                 boostBtn.textContent = idleLabel;

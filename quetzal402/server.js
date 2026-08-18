@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import { createX402Server } from '@coinbase/cdp-sdk/x402';
 import { paymentMiddlewareFromHTTPServer } from '@x402/express';
 import { CdpClient } from '@coinbase/cdp-sdk';
-import { createWalletClient, encodeFunctionData, fallback, http } from 'viem';
+import { createPublicClient, createWalletClient, encodeFunctionData, fallback, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { base, baseSepolia } from 'viem/chains';
 
@@ -104,6 +104,34 @@ function emptyLedger() {
   };
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function scoreToBeat(ledger) {
+  return Math.max(
+    Number(ledger?.currentRecord?.score) || 0,
+    Number(ledger?.lastRecord?.score) || 0,
+  );
+}
+
+async function waitForVaultIncrease(networkId, previous, expectedIncrease) {
+  const target = Number(previous) + Number(expectedIncrease);
+  let latest = Number(previous);
+  for (let i = 0; i < 8; i++) {
+    await sleep(1500);
+    try {
+      latest = await getReceiverUsdc(networkId);
+      if (latest + 1e-6 >= target) {
+        return latest;
+      }
+    } catch (err) {
+      console.warn(`Vault balance poll failed: ${err.message || err}`);
+    }
+  }
+  return latest;
+}
+
 let ledgers = {
   base: emptyLedger(),
   'base-sepolia': emptyLedger(),
@@ -185,18 +213,19 @@ async function getReceiverUsdc(networkId) {
 async function vaultPayload(networkId) {
   const network = parseNetwork(networkId);
   const ledger = ledgers[network];
+  const currentScore = scoreToBeat(ledger);
   let vaultTotal = 0;
   try {
     vaultTotal = await getReceiverUsdc(network);
   } catch (err) {
-    console.warn(err.message || err);
+    console.warn(`Could not read vault USDC: ${err.message || err}`);
   }
 
   return {
     vaultTotal,
     receiver,
     network,
-    currentRecord: ledger.currentRecord,
+    currentRecord: { score: currentScore },
     lastRecord: ledger.lastRecord,
   };
 }
@@ -270,10 +299,15 @@ async function payWinner(toAddress, networkId, amountUsdc) {
 
   const network = NETWORKS[parseNetwork(networkId)];
   const chain = networkId === 'base' ? base : baseSepolia;
-  const client = createWalletClient({
+  const transport = networkTransport(network);
+  const walletClient = createWalletClient({
     account: signer.account,
     chain,
-    transport: networkTransport(network),
+    transport,
+  });
+  const publicClient = createPublicClient({
+    chain,
+    transport,
   });
   const data = encodeFunctionData({
     abi: USDC_TRANSFER_ABI,
@@ -281,19 +315,31 @@ async function payWinner(toAddress, networkId, amountUsdc) {
     args: [toAddress, toAtomicUsdc(amountUsdc)],
   });
 
-  try {
-    const transactionHash = await client.sendTransaction({
+  async function sendPayout() {
+    const transactionHash = await walletClient.sendTransaction({
       to: network.usdc,
       data,
     });
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: transactionHash,
+      timeout: 60_000,
+    });
+    if (receipt.status !== 'success') {
+      throw new Error('Vault payout transaction reverted.');
+    }
+    return transactionHash;
+  }
+
+  try {
+    const transactionHash = await sendPayout();
+    console.log(`[withdraw] sent ${amountUsdc} USDC to ${toAddress} tx=${transactionHash}`);
     return { paid: true, transactionHash };
   } catch (err) {
+    console.warn(`[withdraw] first attempt failed: ${err.shortMessage || err.message || err}`);
     await fundVaultGas(networkId);
     try {
-      const transactionHash = await client.sendTransaction({
-        to: network.usdc,
-        data,
-      });
+      const transactionHash = await sendPayout();
+      console.log(`[withdraw] retry sent ${amountUsdc} USDC to ${toAddress} tx=${transactionHash}`);
       return { paid: true, transactionHash };
     } catch (retryErr) {
       return {
@@ -347,6 +393,7 @@ async function main() {
     for (const config of Object.values(X402_NETWORKS)) {
       const x402Server = await createX402Server({
         environment: config.environment,
+        payToConfig: { type: 'address', evm: receiver },
         routes: {
           'POST /api/vault/deposit': {
             description: `Vault boost: custom USDC deposit (${config.label})`,
@@ -358,7 +405,6 @@ async function main() {
             },
           },
         },
-        payToConfig: { type: 'address', evm: receiver },
       });
 
       x402MiddlewareByNetwork[config.id] = paymentMiddlewareFromHTTPServer(x402Server);
@@ -388,10 +434,14 @@ async function main() {
   app.post('/api/vault/deposit', async (req, res) => {
     const invoice = vaultDepositPricing(req);
     const tokenLabel = invoice.network === 'base' ? 'USDC' : 'Testnet USDC';
+    // Return 200 immediately so the x402 middleware can settle through Coinbase CDP.
+    // Waiting for the vault here cancels settlement and USDC never moves.
     const vault = await vaultPayload(invoice.network);
+    console.log(`[deposit] accepted ${invoice.amount} ${tokenLabel} on ${invoice.network}; CDP facilitator will settle after this response`);
     res.json({
       success: true,
-      message: `The Feathered Serpent is pleased. ${invoice.amount} ${tokenLabel} added to the vault!`,
+      pendingSettlement: true,
+      message: `Payment accepted. Coinbase CDP is settling ${invoice.amount} ${tokenLabel} into the vault...`,
       amount: invoice.amount,
       ...vault,
     });
@@ -402,7 +452,7 @@ async function main() {
     const network = parseNetwork(rawNetwork);
     const finalScore = Number(score);
     const ledger = ledgers[network];
-    const currentScore = Number(ledger.currentRecord?.score) || 0;
+    const currentScore = scoreToBeat(ledger);
 
     if (!Number.isFinite(finalScore) || finalScore < 0) {
       return res.status(400).json({
@@ -444,13 +494,13 @@ async function main() {
       paid: false,
       claimedAt: new Date().toISOString(),
     };
-    ledger.currentRecord = { score: 0 };
+    ledger.currentRecord = { score: finalScore };
     await saveLedgers();
 
     return res.json({
       success: true,
       claimed: true,
-      message: `New record claimed! ${finalScore} points. The record resets to 0.`,
+      message: `New record claimed! ${finalScore} points. Withdraw Prize is unlocked.`,
       walletAddress,
       score: finalScore,
       inputLog,
@@ -473,10 +523,10 @@ async function main() {
 
     const amount = (await vaultPayload(network)).vaultTotal;
     if (amount <= 0) {
-      return res.json({
+      return res.status(409).json({
         success: false,
         paid: false,
-        message: 'Vault is empty. Boost the vault first, then win to withdraw.',
+        message: 'The prize vault is empty, so there is nothing to withdraw. Boost the vault first.',
         ...(await vaultPayload(network)),
       });
     }
@@ -501,11 +551,11 @@ async function main() {
     }
 
     if (ledger.lastRecord.paid) {
-      return res.json({
-        success: true,
-        paid: true,
+      return res.status(409).json({
+        success: false,
+        paid: false,
         skipped: true,
-        message: 'This prize was already withdrawn.',
+        message: 'This prize was already withdrawn. Boost the vault and beat the record again.',
         ...(await vaultPayload(network)),
       });
     }
@@ -531,6 +581,17 @@ async function main() {
     ledger.pendingWithdrawTo = null;
     await saveLedgers();
 
+    let vaultAfter = await vaultPayload(network);
+    for (let i = 0; i < 6 && vaultAfter.vaultTotal + 1e-6 >= amount; i++) {
+      await sleep(1500);
+      vaultAfter = await vaultPayload(network);
+    }
+
+    const explorer = network === 'base' ? 'https://basescan.org' : 'https://sepolia.basescan.org';
+    const txNote = payout.transactionHash
+      ? ` ${explorer}/tx/${payout.transactionHash}`
+      : '';
+
     return res.json({
       success: true,
       paid: true,
@@ -538,8 +599,8 @@ async function main() {
       transactionHash: payout.transactionHash || null,
       message: payout.skipped
         ? 'Prize is already in the connected wallet.'
-        : `Withdrew ${amount.toFixed(2)} USDC to your connected wallet.`,
-      ...(await vaultPayload(network)),
+        : `Withdrew ${amount.toFixed(2)} USDC to your connected wallet.${txNote}`,
+      ...vaultAfter,
     });
   });
 

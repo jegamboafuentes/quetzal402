@@ -5,13 +5,24 @@
 * Use basic geometric shapes (rectangles) for the snake and food for now. */
 
 const NETWORK_STORAGE_KEY = 'quetzal402.network';
+const GAME_WIDTH = 640;
+const GAME_HEIGHT = 480;
 const vaultTotalEl = document.getElementById('vault-total');
+const prizeEligibleEl = document.getElementById('prize-eligible');
 const statusEl = document.getElementById('status');
 const networkSelect = document.getElementById('network-select');
 const networkBadge = document.getElementById('network-badge');
 const boostBtn = document.getElementById('boost-btn');
 const withdrawBtn = document.getElementById('withdraw-btn');
 const thunderOverlay = document.getElementById('thunder-overlay');
+const overlay = document.getElementById('game-overlay');
+const overlayTitle = document.getElementById('overlay-title');
+const overlayMessage = document.getElementById('overlay-message');
+const startBtn = document.getElementById('start-btn');
+const restartBtn = document.getElementById('restart-btn');
+const gameWrap = document.getElementById('game-wrap');
+const hudScoreEl = document.getElementById('hud-score');
+const recordCard = document.getElementById('record-card');
 
 let lastVaultState = {};
 let thunderTimer = null;
@@ -26,6 +37,13 @@ function persistNetwork(networkId) {
     if (typeof window.quetzalSetSelectedNetwork === 'function') {
         window.quetzalSetSelectedNetwork(networkId);
     }
+}
+
+function explorerAddressUrl(address) {
+    const base = getSelectedNetwork() === 'base'
+        ? 'https://basescan.org'
+        : 'https://sepolia.basescan.org';
+    return `${base}/address/${address}`;
 }
 
 function readDepositAmount() {
@@ -54,13 +72,32 @@ function applyNetworkTheme(networkId) {
     }
 }
 
-function setVaultTotal(value) {
+function formatUsdc(value) {
     const amount = Number(value);
-    vaultTotalEl.textContent = `${Number.isFinite(amount) ? amount.toFixed(2) : '0.00'} USDC`;
+    return `${Number.isFinite(amount) ? amount.toFixed(2) : '0.00'} USDC`;
+}
+
+function setVaultTotal(value) {
+    const text = formatUsdc(value);
+    if (vaultTotalEl) {
+        vaultTotalEl.textContent = text;
+    }
+    if (prizeEligibleEl) {
+        prizeEligibleEl.textContent = text;
+    }
+    document.getElementById('vault-hero')?.classList.toggle('has-funds', Number(value) > 0);
 }
 
 function setStatus(message) {
-    statusEl.textContent = message;
+    if (statusEl) {
+        statusEl.textContent = message;
+    }
+}
+
+function setHudScore(score) {
+    if (hudScoreEl) {
+        hudScoreEl.textContent = String(score);
+    }
 }
 
 function shortenAddress(address) {
@@ -73,6 +110,13 @@ function shortenAddress(address) {
 function canWithdrawPrize(data = lastVaultState) {
     const last = data.lastRecord;
     return Boolean(last?.walletAddress) && !last.paid;
+}
+
+function scoreToBeat(data = lastVaultState) {
+    return Math.max(
+        Number(data.currentRecord?.score) || 0,
+        Number(data.lastRecord?.score) || 0,
+    );
 }
 
 function canStartGame(data = lastVaultState) {
@@ -113,6 +157,7 @@ function setWithdrawUnlocked(unlocked) {
     withdrawBtn.title = unlocked
         ? 'Record broken. Withdraw the prize vault.'
         : 'Beat the current record to unlock withdraw';
+    recordCard?.classList.toggle('unlocked', unlocked);
 }
 
 function playThunder() {
@@ -144,14 +189,14 @@ function applyVaultState(data = {}, { celebrate } = {}) {
     const last = data.lastRecord;
 
     if (currentEl) {
-        currentEl.textContent = String(data.currentRecord?.score ?? 0);
+        currentEl.textContent = String(scoreToBeat(data));
     }
     if (lastEl) {
         lastEl.textContent = last ? String(last.score) : '—';
     }
     if (amountEl) {
         amountEl.textContent = last && last.amount != null
-            ? `${Number(last.amount).toFixed(2)} USDC`
+            ? formatUsdc(last.amount)
             : '—';
     }
     if (collectorEl) {
@@ -161,8 +206,13 @@ function applyVaultState(data = {}, { celebrate } = {}) {
 
     const vaultAddressEl = document.getElementById('vault-address');
     if (vaultAddressEl) {
-        vaultAddressEl.textContent = data.receiver ? shortenAddress(data.receiver) : '';
+        vaultAddressEl.textContent = data.receiver ? shortenAddress(data.receiver) : '—';
         vaultAddressEl.title = data.receiver || '';
+        if (data.receiver) {
+            vaultAddressEl.href = explorerAddressUrl(data.receiver);
+        } else {
+            vaultAddressEl.removeAttribute('href');
+        }
     }
 
     const unlocked = canWithdrawPrize(data);
@@ -210,12 +260,6 @@ if (depositAmountInput) {
 
 loadVault().catch((err) => setStatus(err.message));
 
-const overlay = document.getElementById('game-overlay');
-const overlayTitle = document.getElementById('overlay-title');
-const overlayMessage = document.getElementById('overlay-message');
-const startBtn = document.getElementById('start-btn');
-const restartBtn = document.getElementById('restart-btn');
-
 function setOverlayMessage(message, tone = 'info') {
     if (overlayMessage) {
         overlayMessage.textContent = message || '';
@@ -237,6 +281,8 @@ function showStartOverlay() {
     startBtn.hidden = false;
     restartBtn.hidden = true;
     overlay.classList.remove('hidden');
+    gameWrap?.classList.remove('is-playing');
+    document.body.classList.remove('is-playing');
     syncStartButton();
 }
 
@@ -246,6 +292,8 @@ function showRestartOverlay() {
     startBtn.hidden = true;
     restartBtn.hidden = false;
     overlay.classList.remove('hidden');
+    gameWrap?.classList.remove('is-playing');
+    document.body.classList.remove('is-playing');
     syncStartButton();
 }
 
@@ -264,6 +312,8 @@ function focusGameCanvas() {
 
 function hideOverlay() {
     overlay.classList.add('hidden');
+    gameWrap?.classList.add('is-playing');
+    document.body.classList.add('is-playing');
     focusGameCanvas();
 }
 
@@ -286,28 +336,85 @@ function applyDirection(scene, x, y, key) {
     });
 }
 
+const DIRECTION_MAP = {
+    ArrowUp: [0, -1, 'UP'],
+    ArrowDown: [0, 1, 'DOWN'],
+    ArrowLeft: [-1, 0, 'LEFT'],
+    ArrowRight: [1, 0, 'RIGHT'],
+    up: [0, -1, 'UP'],
+    down: [0, 1, 'DOWN'],
+    left: [-1, 0, 'LEFT'],
+    right: [1, 0, 'RIGHT'],
+};
+
 window.addEventListener('keydown', (event) => {
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) {
         event.preventDefault();
     }
 
-    if (event.key === 'ArrowUp') {
-        applyDirection(gameScene, 0, -1, 'UP');
-    } else if (event.key === 'ArrowDown') {
-        applyDirection(gameScene, 0, 1, 'DOWN');
-    } else if (event.key === 'ArrowLeft') {
-        applyDirection(gameScene, -1, 0, 'LEFT');
-    } else if (event.key === 'ArrowRight') {
-        applyDirection(gameScene, 1, 0, 'RIGHT');
+    const mapped = DIRECTION_MAP[event.key];
+    if (mapped) {
+        applyDirection(gameScene, mapped[0], mapped[1], mapped[2]);
     }
 }, { passive: false });
 
+function bindTouchControls() {
+    let swipeOrigin = null;
+    const swipeTarget = gameWrap || document.getElementById('game');
+    if (!swipeTarget) {
+        return;
+    }
+
+    const lockScroll = (event) => {
+        event.preventDefault();
+    };
+
+    swipeTarget.addEventListener('touchstart', (event) => {
+        const touch = event.changedTouches[0];
+        swipeOrigin = { x: touch.clientX, y: touch.clientY };
+    }, { passive: true });
+
+    swipeTarget.addEventListener('touchmove', lockScroll, { passive: false });
+
+    swipeTarget.addEventListener('touchend', (event) => {
+        if (!swipeOrigin) {
+            return;
+        }
+        const touch = event.changedTouches[0];
+        const dx = touch.clientX - swipeOrigin.x;
+        const dy = touch.clientY - swipeOrigin.y;
+        swipeOrigin = null;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) {
+            return;
+        }
+        if (Math.abs(dx) > Math.abs(dy)) {
+            applyDirection(gameScene, dx > 0 ? 1 : -1, 0, dx > 0 ? 'RIGHT' : 'LEFT');
+        } else {
+            applyDirection(gameScene, 0, dy > 0 ? 1 : -1, dy > 0 ? 'DOWN' : 'UP');
+        }
+    }, { passive: true });
+}
+
+const TILE = 32;
+const MOVE_MS = 150;
+const SNAKE_HEAD_COLOR = 0x02C39A;
+const SNAKE_BODY_COLOR = 0x00A896;
+const JADE_COLOR = 0xF5C451;
+const COLS = GAME_WIDTH / TILE;
+const ROWS = GAME_HEIGHT / TILE;
+
 const config = {
     type: Phaser.AUTO,
-    width: 640,
-    height: 480,
+    width: GAME_WIDTH,
+    height: GAME_HEIGHT,
     parent: 'game',
-    backgroundColor: '#0a2a1a',
+    backgroundColor: '#0A0E0D',
+    scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        width: GAME_WIDTH,
+        height: GAME_HEIGHT,
+    },
     scene: {
         preload: preload,
         create: create,
@@ -318,14 +425,7 @@ const config = {
 const game = new Phaser.Game(config);
 
 showStartOverlay();
-
-const TILE = 32;
-const MOVE_MS = 150;
-const SNAKE_HEAD_COLOR = 0x3cb371;
-const SNAKE_BODY_COLOR = 0x2e8b57;
-const JADE_COLOR = 0xd4af37;
-const COLS = 640 / TILE;
-const ROWS = 480 / TILE;
+bindTouchControls();
 
 let gameScene = null;
 
@@ -379,6 +479,7 @@ function createSnake(scene) {
     scene.isRunning = false;
     scene.snake = [];
     scene.scoreText.setText('Score: 0');
+    setHudScore(0);
 
     for (let i = 0; i < 3; i++) {
         const segment = scene.add.rectangle(
@@ -409,21 +510,23 @@ function startRun(scene) {
 function create() {
     gameScene = this;
     this.scoreText = this.add.text(20, 20, 'Score: 0', {
-        fontSize: '20px',
-        color: '#d4af37',
+        fontSize: '16px',
+        color: '#F5C451',
+        fontFamily: 'monospace',
     });
+    this.scoreText.setAlpha(0);
 
     const graphics = this.add.graphics();
-    graphics.lineStyle(1, 0x1f4d29, 0.4);
+    graphics.lineStyle(1, 0x16332c, 0.45);
     graphics.beginPath();
 
-    for (let i = 0; i <= 640; i += TILE) {
+    for (let i = 0; i <= GAME_WIDTH; i += TILE) {
         graphics.moveTo(i, 0);
-        graphics.lineTo(i, 480);
+        graphics.lineTo(i, GAME_HEIGHT);
     }
-    for (let j = 0; j <= 480; j += TILE) {
+    for (let j = 0; j <= GAME_HEIGHT; j += TILE) {
         graphics.moveTo(0, j);
-        graphics.lineTo(640, j);
+        graphics.lineTo(GAME_WIDTH, j);
     }
 
     graphics.strokePath();
@@ -473,14 +576,10 @@ async function triggerGameOver(scene) {
 
     scene.isGameOver = true;
     scene.isRunning = false;
-    scene.gameOverText = scene.add.text(320, 240, 'Game Over', {
-        fontSize: '40px',
-        color: '#d4af37',
-    }).setOrigin(0.5);
     showRestartOverlay();
 
     try {
-        const currentScore = Number(lastVaultState.currentRecord?.score) || 0;
+        const currentScore = scoreToBeat();
         if (scene.score <= currentScore) {
             const message = currentScore === 0
                 ? 'Eat a jade stone to claim the record.'
@@ -534,7 +633,7 @@ function update(time, delta) {
     const nextX = head.x + this.direction.x * TILE;
     const nextY = head.y + this.direction.y * TILE;
 
-    const hitWall = nextX < 0 || nextY < 0 || nextX >= 640 || nextY >= 480;
+    const hitWall = nextX < 0 || nextY < 0 || nextX >= GAME_WIDTH || nextY >= GAME_HEIGHT;
     const hitTail = this.snake.some((segment, index) => {
         if (index === this.snake.length - 1) {
             return false;
@@ -558,6 +657,7 @@ function update(time, delta) {
     if (head.x === this.jadeStone.x && head.y === this.jadeStone.y) {
         this.score += 10;
         this.scoreText.setText(`Score: ${this.score}`);
+        setHudScore(this.score);
 
         const newSegment = this.add.rectangle(tailX, tailY, TILE, TILE, SNAKE_BODY_COLOR);
         newSegment.setOrigin(0, 0);

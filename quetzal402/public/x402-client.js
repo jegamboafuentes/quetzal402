@@ -46,6 +46,14 @@ export function getNetworkRpcUrls(networkId) {
     return network.rpcUrls || [network.rpcUrl];
 }
 
+export function getExplorerAddressUrl(networkId, address) {
+    const network = NETWORKS[networkId] || NETWORKS['base-sepolia'];
+    if (!address) {
+        return network.explorer;
+    }
+    return `${network.explorer}/address/${address}`;
+}
+
 async function rpcRequest(rpcUrl, method, params = []) {
     const res = await fetch(rpcUrl, {
         method: 'POST',
@@ -151,6 +159,11 @@ export async function createX402Client(ethersSigner) {
     const client = new x402Client();
     registerExactEvmScheme(client, {
         signer: toClientEvmSigner(ethersSigner, await ethersSigner.getAddress()),
+        networks: ['eip155:8453', 'eip155:84532'],
+        schemeOptions: {
+            8453: { rpcUrl: NETWORKS.base.rpcUrl },
+            84532: { rpcUrl: NETWORKS['base-sepolia'].rpcUrl },
+        },
     });
     return {
         fetch: wrapFetchWithPayment(fetch, client),
