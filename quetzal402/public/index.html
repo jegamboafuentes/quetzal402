@@ -43,6 +43,14 @@
             position: relative;
             display: inline-block;
             flex: 0 0 auto;
+            width: 640px;
+            max-width: 100%;
+            min-height: 480px;
+        }
+        #game {
+            width: 640px;
+            max-width: 100%;
+            min-height: 480px;
         }
         .ui-container {
             margin-top: 8px;
@@ -318,8 +326,8 @@
         <div class="network-bar">
             <label for="network-select">Network</label>
             <select id="network-select" class="network-select">
-                <option value="base-sepolia">Testnet (Sepolia)</option>
-                <option value="base">Mainnet (Real USDC)</option>
+                <option value="base-sepolia">Base Sepolia Testnet</option>
+                <option value="base">Base Mainnet (Real USDC)</option>
             </select>
             <span id="network-badge" class="network-badge testnet">Testnet</span>
         </div>
@@ -333,15 +341,16 @@
     </div>
     <script src="game.js"></script>
     <script type="module">
-        import { BrowserProvider, Contract, JsonRpcProvider, formatUnits } from 'ethers';
+        import { BrowserProvider, Contract, formatUnits } from 'ethers';
         import {
             NETWORKS,
             USDC_ABI,
             createX402Client,
             depositUrl,
             ensureWalletOnNetwork,
-            getNetworkRpcUrls,
             getSelectedNetwork,
+            readUsdcBalanceFromRpc,
+            setSelectedNetwork,
         } from '@x402/client';
 
         const boostBtn = document.getElementById('boost-btn');
@@ -392,19 +401,23 @@
 
         async function readUsdcBalance(address, networkId) {
             const network = NETWORKS[networkId];
-            let lastError = null;
-            for (const rpcUrl of getNetworkRpcUrls(networkId)) {
+
+            if (window.ethereum) {
                 try {
-                    const rpc = new JsonRpcProvider(rpcUrl);
-                    return await new Contract(network.usdc, USDC_ABI, rpc).balanceOf(address);
-                } catch (err) {
-                    lastError = err;
+                    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+                    if (String(chainId).toLowerCase() === network.chainIdHex.toLowerCase()) {
+                        const provider = new BrowserProvider(window.ethereum);
+                        return await new Contract(network.usdc, USDC_ABI, provider).balanceOf(address);
+                    }
+                } catch {
+                    // MetaMask RPC can fail while reconnecting; fall back to public RPC.
                 }
             }
-            throw lastError || new Error(`Could not read USDC on ${network.name}.`);
+
+            return readUsdcBalanceFromRpc(address, networkId);
         }
 
-        async function refreshWalletBalance({ request = false } = {}) {
+        async function refreshWalletBalance({ request = false, quiet = false } = {}) {
             if (!window.ethereum) {
                 setWalletUi(null, 'No wallet');
                 return null;
@@ -419,11 +432,43 @@
             }
 
             const networkId = getSelectedNetwork();
+            const network = NETWORKS[networkId];
             const address = accounts[0];
-            const raw = await readUsdcBalance(address, networkId);
-            setWalletUi(address, `${Number(formatUnits(raw, 6)).toFixed(2)} USDC`);
+
+            try {
+                const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+                const onSelectedNetwork = String(chainId).toLowerCase() === network.chainIdHex.toLowerCase();
+
+                if (!onSelectedNetwork) {
+                    setWalletUi(address, `Switch to ${network.name}`);
+                    return address;
+                }
+
+                const raw = await readUsdcBalance(address, networkId);
+                setWalletUi(address, `${Number(formatUnits(raw, 6)).toFixed(2)} USDC`);
+            } catch (err) {
+                setWalletUi(address, 'Balance unavailable');
+                if (!quiet) {
+                    setStatus('Could not read wallet balance. Check MetaMask network or try again.');
+                }
+            }
+
             return address;
         }
+
+        async function refreshBalancesAfterTx() {
+            for (const delay of [0, 2000, 5000]) {
+                if (delay) {
+                    await new Promise((resolve) => setTimeout(resolve, delay));
+                }
+                await refreshWalletBalance({ quiet: true }).catch(() => {});
+                window.refreshVault?.();
+            }
+        }
+
+        window.quetzalGetSelectedNetwork = getSelectedNetwork;
+        window.quetzalSetSelectedNetwork = setSelectedNetwork;
+        window.refreshWalletBalance = refreshWalletBalance;
 
         async function getConnectedWallet({ request = false } = {}) {
             const address = await refreshWalletBalance({ request });
@@ -477,7 +522,7 @@
             }
 
             await refreshWalletBalance();
-            setTimeout(() => window.refreshVault?.(), 2500);
+            refreshBalancesAfterTx().catch(() => {});
             setStatus(data.message || 'Prize withdrawn.');
             return data;
         }
@@ -493,21 +538,22 @@
         });
 
         networkSelect?.addEventListener('change', () => {
-            refreshWalletBalance().catch(() => {});
+            setSelectedNetwork(networkSelect.value);
+            refreshWalletBalance({ quiet: true }).catch(() => {});
             window.refreshVault?.();
         });
 
         if (window.ethereum) {
-            refreshWalletBalance().catch(() => {});
+            refreshWalletBalance({ quiet: true }).catch(() => {});
             window.ethereum.on?.('accountsChanged', (accounts) => {
                 if (!accounts?.length) {
                     setWalletUi(null);
                     return;
                 }
-                refreshWalletBalance().catch(() => {});
+                refreshWalletBalance({ quiet: true }).catch(() => {});
             });
             window.ethereum.on?.('chainChanged', () => {
-                refreshWalletBalance().catch(() => {});
+                refreshWalletBalance({ quiet: true }).catch(() => {});
                 window.refreshVault?.();
             });
         }
@@ -561,10 +607,11 @@
                     window.applyVaultState(data);
                 }
                 await refreshWalletBalance();
-                setTimeout(() => window.refreshVault?.(), 2500);
+                refreshBalancesAfterTx().catch(() => {});
                 setStatus(data.message || 'The vault was boosted.');
             } catch (err) {
-                setStatus(err.shortMessage || err.message || 'Boost failed.');
+                const message = err.shortMessage || err.message || 'Boost failed.';
+                setStatus(message.includes('revert') ? 'Boost failed. Check MetaMask is connected to Base Sepolia.' : message);
             } finally {
                 boostBtn.disabled = false;
                 boostBtn.textContent = idleLabel;

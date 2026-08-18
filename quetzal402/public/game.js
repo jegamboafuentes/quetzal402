@@ -21,6 +21,13 @@ function getSelectedNetwork() {
     return saved === 'base' ? 'base' : 'base-sepolia';
 }
 
+function persistNetwork(networkId) {
+    localStorage.setItem(NETWORK_STORAGE_KEY, networkId);
+    if (typeof window.quetzalSetSelectedNetwork === 'function') {
+        window.quetzalSetSelectedNetwork(networkId);
+    }
+}
+
 function readDepositAmount() {
     const parsed = Number(document.getElementById('deposit-amount')?.value);
     if (!Number.isFinite(parsed) || parsed < 1) {
@@ -189,7 +196,7 @@ window.refreshVault = () => loadVault().catch((err) => setStatus(err.message));
 applyNetworkTheme(getSelectedNetwork());
 if (networkSelect) {
     networkSelect.addEventListener('change', () => {
-        localStorage.setItem(NETWORK_STORAGE_KEY, networkSelect.value);
+        persistNetwork(networkSelect.value);
         applyNetworkTheme(networkSelect.value);
         loadVault().catch((err) => setStatus(err.message));
     });
@@ -309,6 +316,8 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
+
+showStartOverlay();
 
 const TILE = 32;
 const MOVE_MS = 150;

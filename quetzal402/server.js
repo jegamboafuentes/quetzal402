@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import { createX402Server } from '@coinbase/cdp-sdk/x402';
 import { paymentMiddlewareFromHTTPServer } from '@x402/express';
 import { CdpClient } from '@coinbase/cdp-sdk';
-import { createWalletClient, encodeFunctionData, http } from 'viem';
+import { createWalletClient, encodeFunctionData, fallback, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { base, baseSepolia } from 'viem/chains';
 
@@ -35,6 +35,7 @@ const USDC_TRANSFER_ABI = [
 const NETWORKS = {
   base: {
     id: 'base',
+    chainId: 8453,
     usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
     rpcUrl: 'https://mainnet.base.org',
     rpcUrls: [
@@ -44,25 +45,27 @@ const NETWORKS = {
   },
   'base-sepolia': {
     id: 'base-sepolia',
+    chainId: 84532,
     usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-    rpcUrl: 'https://base-sepolia-rpc.publicnode.com',
+    rpcUrl: 'https://base-sepolia.drpc.org',
     rpcUrls: [
-      'https://base-sepolia-rpc.publicnode.com',
+      'https://base-sepolia.drpc.org',
       'https://84532.rpc.thirdweb.com',
+      'https://base-sepolia-rpc.publicnode.com',
       'https://sepolia.base.org',
     ],
   },
 };
 
-async function ethCall(rpcUrl, to, data) {
+async function rpcRequest(rpcUrl, method, params = []) {
   const res = await fetch(rpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       jsonrpc: '2.0',
       id: 1,
-      method: 'eth_call',
-      params: [{ to, data }, 'latest'],
+      method,
+      params,
     }),
   });
   const payload = await res.json();
@@ -73,6 +76,24 @@ async function ethCall(rpcUrl, to, data) {
     throw new Error('RPC returned no result');
   }
   return payload.result;
+}
+
+async function verifyRpcChain(rpcUrl, expectedChainId) {
+  const result = await rpcRequest(rpcUrl, 'eth_chainId');
+  const chainId = Number.parseInt(result, 16);
+  if (chainId !== expectedChainId) {
+    throw new Error(`RPC chain mismatch (${chainId} != ${expectedChainId})`);
+  }
+}
+
+async function ethCall(rpcUrl, expectedChainId, to, data) {
+  await verifyRpcChain(rpcUrl, expectedChainId);
+  return rpcRequest(rpcUrl, 'eth_call', [{ to, data }, 'latest']);
+}
+
+function networkTransport(network) {
+  const rpcUrls = network.rpcUrls || [network.rpcUrl];
+  return fallback(rpcUrls.map((url) => http(url)));
 }
 
 function emptyLedger() {
@@ -151,7 +172,7 @@ async function getReceiverUsdc(networkId) {
 
   for (const rpcUrl of rpcUrls) {
     try {
-      const result = await ethCall(rpcUrl, network.usdc, data);
+      const result = await ethCall(rpcUrl, network.chainId, network.usdc, data);
       return Number(BigInt(result)) / 10 ** USDC_DECIMALS;
     } catch (err) {
       lastError = err;
@@ -252,7 +273,7 @@ async function payWinner(toAddress, networkId, amountUsdc) {
   const client = createWalletClient({
     account: signer.account,
     chain,
-    transport: http(network.rpcUrl),
+    transport: networkTransport(network),
   });
   const data = encodeFunctionData({
     abi: USDC_TRANSFER_ABI,
