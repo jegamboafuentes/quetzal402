@@ -15,11 +15,11 @@
 
 ## 🐍 About The Game
 
+**Play the game here:** [https://quetzal402.metaverseprofessional.tech/](https://quetzal402.metaverseprofessional.tech/) 
+
 <div align="center">
   <img src="https://github.com/jegamboafuentes/quetzal402/blob/main/quetzal402/public/assets/screenshotv1.png?raw=true" alt="Quetzal402 Gameplay Preview" width="700" />
 </div>
-
-**Quetzal402** takes the classic mechanics of retro Snake and elevates them with on-chain stakes...
 
 **Quetzal402** takes the classic mechanics of retro Snake and elevates them with on-chain stakes. Players guide Quetzalcoatl, the Feathered Serpent, across a temple grid to consume Jade Stones and grow. 
 
