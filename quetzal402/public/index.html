@@ -14,21 +14,39 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
     <style>
+        html, body {
+            margin: 0;
+            height: 100%;
+            overflow: hidden;
+        }
         body {
             background-color: #0b0f12;
             color: #d4af37;
             text-align: center;
             font-family: 'Courier New', Courier, monospace;
-            margin: 0;
-            padding: 20px;
+            padding: 8px 12px 10px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            font-size: 22px;
+            margin: 0 0 8px;
         }
         canvas {
             border: 4px solid #d4af37;
             box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
-            margin-top: 10px;
+            display: block;
+        }
+        #game-wrap {
+            position: relative;
+            display: inline-block;
+            flex: 0 0 auto;
         }
         .ui-container {
-            margin-bottom: 10px;
+            margin-top: 8px;
+            width: min(640px, 100%);
         }
         button {
             background-color: #1f4d29;
@@ -49,25 +67,183 @@
             margin-top: 8px;
             color: #9ad1a8;
         }
+        .network-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin: 6px 0;
+        }
+        .network-select {
+            background-color: #101816;
+            color: #d4af37;
+            border: 2px solid #d4af37;
+            padding: 8px 12px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .network-badge {
+            display: inline-block;
+            min-width: 92px;
+            padding: 6px 12px;
+            border: 2px solid currentColor;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .network-badge.testnet {
+            color: #3cb371;
+            box-shadow: 0 0 14px rgba(60, 179, 113, 0.55);
+        }
+        .network-badge.mainnet {
+            color: #d4af37;
+            box-shadow: 0 0 16px rgba(212, 175, 55, 0.7);
+        }
+        body[data-network="base"] canvas {
+            border-color: #d4af37;
+        }
+        body[data-network="base-sepolia"] canvas {
+            border-color: #3cb371;
+        }
+        #game-overlay {
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            background: rgba(11, 15, 18, 0.78);
+            z-index: 3;
+        }
+        #game-overlay.hidden {
+            display: none;
+        }
+        #overlay-title {
+            margin: 0;
+            font-size: 28px;
+            text-shadow: 0 0 12px rgba(212, 175, 55, 0.4);
+        }
+        .ledger-board {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 18px;
+            margin: 6px 0 8px;
+            padding: 8px 12px;
+            border: 1px solid rgba(212, 175, 55, 0.45);
+            text-align: left;
+            font-size: 13px;
+        }
+        .ledger-board p {
+            margin: 0;
+        }
+        #last-collector {
+            font-size: 12px;
+            word-break: break-all;
+        }
+        .boost-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+        .wallet-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: 4px 0 6px;
+        }
+        #wallet-address {
+            font-size: 13px;
+        }
+        #wallet-connect-btn {
+            padding: 6px 14px;
+            font-size: 14px;
+        }
+        #deposit-amount {
+            width: 72px;
+            background-color: #101816;
+            color: #d4af37;
+            border: 2px solid #d4af37;
+            padding: 8px 10px;
+            font-family: inherit;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
+    <h1>Quetzal402: The Feathered Ledger</h1>
+    <div id="game-wrap">
+        <div id="game"></div>
+        <div id="game-overlay">
+            <p id="overlay-title">Quetzalcoatl Approaches...</p>
+            <button id="start-btn" type="button">Start</button>
+            <button id="restart-btn" type="button" hidden>Restart</button>
+        </div>
+    </div>
     <div class="ui-container">
-        <h1>Quetzal402: The Feathered Ledger</h1>
-        <p>Current Vault: <span id="vault-total">0.00 USDC</span></p>
-        <button id="boost-btn">Boost Vault (1 USDC)</button>
+        <div class="wallet-bar">
+            <p>Wallet: <span id="wallet-balance">Not connected</span></p>
+            <span id="wallet-address"></span>
+            <button id="wallet-connect-btn" type="button">Connect Wallet</button>
+        </div>
+        <p>Prize Vault: <span id="vault-total">0.00 USDC</span> <span id="vault-address"></span></p>
+        <div class="ledger-board">
+            <p>Current record: <span id="current-record">0</span></p>
+            <p>Last record: <span id="last-record">—</span></p>
+            <p>Amount: <span id="last-amount">—</span></p>
+            <p>Collected by: <span id="last-collector">—</span></p>
+        </div>
+        <div class="network-bar">
+            <label for="network-select">Network</label>
+            <select id="network-select" class="network-select">
+                <option value="base-sepolia">Testnet (Sepolia)</option>
+                <option value="base">Mainnet (Real USDC)</option>
+            </select>
+            <span id="network-badge" class="network-badge testnet">Testnet</span>
+        </div>
+        <div class="boost-row">
+            <label for="deposit-amount">USDC</label>
+            <input type="number" id="deposit-amount" value="1" min="1" step="1">
+            <button id="boost-btn" type="button">Boost Vault (1 Testnet USDC)</button>
+            <button id="withdraw-btn" type="button">Withdraw Prize</button>
+        </div>
         <p id="status"></p>
     </div>
-    <div id="game"></div>
     <script src="game.js"></script>
     <script type="module">
-        import { BrowserProvider } from 'ethers';
-        import { createX402Client } from '@x402/client';
+        import { BrowserProvider, Contract, JsonRpcProvider, formatUnits } from 'ethers';
+        import {
+            NETWORKS,
+            USDC_ABI,
+            createX402Client,
+            depositUrl,
+            ensureWalletOnNetwork,
+            getSelectedNetwork,
+        } from '@x402/client';
 
-        const BASE_CHAIN_ID = '0x2105';
         const boostBtn = document.getElementById('boost-btn');
-        const vaultTotalEl = document.getElementById('vault-total');
+        const withdrawBtn = document.getElementById('withdraw-btn');
+        const walletConnectBtn = document.getElementById('wallet-connect-btn');
+        const walletBalanceEl = document.getElementById('wallet-balance');
+        const walletAddressEl = document.getElementById('wallet-address');
         const statusEl = document.getElementById('status');
+        const depositAmountInput = document.getElementById('deposit-amount');
+        const networkSelect = document.getElementById('network-select');
+        let connectedAddress = null;
 
         function setStatus(message) {
             if (statusEl) {
@@ -75,27 +251,155 @@
             }
         }
 
-        async function ensureBaseNetwork() {
-            try {
-                await window.ethereum.request({
-                    method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: BASE_CHAIN_ID }],
-                });
-            } catch (err) {
-                if (err.code !== 4902) {
-                    throw err;
-                }
-                await window.ethereum.request({
-                    method: 'wallet_addEthereumChain',
-                    params: [{
-                        chainId: BASE_CHAIN_ID,
-                        chainName: 'Base',
-                        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-                        rpcUrls: ['https://mainnet.base.org'],
-                        blockExplorerUrls: ['https://basescan.org'],
-                    }],
-                });
+        function shortenAddress(address) {
+            if (!address) {
+                return '';
             }
+            return `${address.slice(0, 6)}…${address.slice(-4)}`;
+        }
+
+        function setWalletUi(address, balanceText = 'Not connected') {
+            connectedAddress = address || null;
+            if (walletBalanceEl) {
+                walletBalanceEl.textContent = address ? balanceText : 'Not connected';
+                walletBalanceEl.title = address || 'Connect your wallet';
+            }
+            if (walletAddressEl) {
+                walletAddressEl.textContent = address ? shortenAddress(address) : '';
+                walletAddressEl.title = address || '';
+            }
+            if (walletConnectBtn) {
+                walletConnectBtn.textContent = address ? 'Disconnect' : 'Connect Wallet';
+            }
+        }
+
+        function readDepositAmount() {
+            const parsed = Number(depositAmountInput?.value);
+            if (!Number.isFinite(parsed) || parsed < 1) {
+                return 1;
+            }
+            return Math.floor(parsed);
+        }
+
+        async function refreshWalletBalance({ request = false } = {}) {
+            if (!window.ethereum) {
+                setWalletUi(null, 'No wallet');
+                return null;
+            }
+
+            const accounts = await window.ethereum.request({
+                method: request ? 'eth_requestAccounts' : 'eth_accounts',
+            });
+            if (!accounts?.length) {
+                setWalletUi(null);
+                return null;
+            }
+
+            const networkId = getSelectedNetwork();
+            const network = NETWORKS[networkId];
+            const address = accounts[0];
+            let raw;
+
+            try {
+                const rpc = new JsonRpcProvider(network.rpcUrl);
+                raw = await new Contract(network.usdc, USDC_ABI, rpc).balanceOf(address);
+            } catch {
+                const walletProvider = new BrowserProvider(window.ethereum);
+                const walletNetwork = await walletProvider.getNetwork();
+                if (Number(walletNetwork.chainId) !== network.chainId) {
+                    throw new Error(`Switch MetaMask to ${network.name} to see wallet USDC.`);
+                }
+                raw = await new Contract(network.usdc, USDC_ABI, walletProvider).balanceOf(address);
+            }
+
+            setWalletUi(address, `${Number(formatUnits(raw, 6)).toFixed(2)} USDC`);
+            return address;
+        }
+
+        async function getConnectedWallet({ request = true } = {}) {
+            const address = await refreshWalletBalance({ request });
+            if (!address) {
+                throw new Error('Connect your wallet first.');
+            }
+            return address;
+        }
+
+        async function connectWallet() {
+            const address = await getConnectedWallet({ request: true });
+            setStatus(`Connected ${shortenAddress(address)}`);
+            return address;
+        }
+
+        async function disconnectWallet() {
+            if (window.ethereum) {
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_revokePermissions',
+                        params: [{ eth_accounts: {} }],
+                    });
+                } catch {
+                    // Some wallets ignore revoke; the UI still disconnects locally.
+                }
+            }
+            setWalletUi(null);
+            setStatus('Wallet disconnected.');
+        }
+
+        async function withdrawPrize() {
+            const networkId = getSelectedNetwork();
+            const walletAddress = await getConnectedWallet({ request: true });
+            await ensureWalletOnNetwork(window.ethereum, networkId);
+
+            const res = await fetch('/api/vault/withdraw', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    walletAddress,
+                    network: networkId,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (typeof window.applyVaultState === 'function') {
+                window.applyVaultState(data);
+            }
+
+            if (!res.ok || !data.paid) {
+                throw new Error(data.message || `Withdraw failed (${res.status})`);
+            }
+
+            await refreshWalletBalance();
+            setTimeout(() => window.refreshVault?.(), 2500);
+            setStatus(data.message || 'Prize withdrawn.');
+            return data;
+        }
+
+        window.getConnectedWallet = getConnectedWallet;
+        window.withdrawPrize = withdrawPrize;
+
+        walletConnectBtn?.addEventListener('click', () => {
+            const action = connectedAddress ? disconnectWallet() : connectWallet();
+            action.catch((err) => {
+                setStatus(err.shortMessage || err.message || 'Wallet connection failed.');
+            });
+        });
+
+        networkSelect?.addEventListener('change', () => {
+            refreshWalletBalance().catch(() => {});
+            window.refreshVault?.();
+        });
+
+        if (window.ethereum) {
+            refreshWalletBalance().catch(() => {});
+            window.ethereum.on?.('accountsChanged', (accounts) => {
+                if (!accounts?.length) {
+                    setWalletUi(null);
+                    return;
+                }
+                refreshWalletBalance().catch(() => {});
+            });
+            window.ethereum.on?.('chainChanged', () => {
+                refreshWalletBalance().catch(() => {});
+            });
         }
 
         boostBtn.addEventListener('click', async () => {
@@ -104,21 +408,37 @@
                 return;
             }
 
+            const networkId = getSelectedNetwork();
+            const network = NETWORKS[networkId];
+            const userAmount = readDepositAmount();
+            const tokenLabel = networkId === 'base' ? 'USDC' : 'Testnet USDC';
+            const idleLabel = `Boost Vault (${userAmount} ${tokenLabel})`;
             boostBtn.disabled = true;
+            boostBtn.textContent = `Boosting ${userAmount} ${tokenLabel}...`;
             setStatus('Connecting wallet...');
 
             try {
                 await window.ethereum.request({ method: 'eth_requestAccounts' });
-                await ensureBaseNetwork();
+                await ensureWalletOnNetwork(window.ethereum, networkId);
+                await refreshWalletBalance();
 
                 const provider = new BrowserProvider(window.ethereum);
+                const walletNetwork = await provider.getNetwork();
+                if (Number(walletNetwork.chainId) !== network.chainId) {
+                    throw new Error(`Wallet is not on ${network.name}. Please switch networks and try again.`);
+                }
+
                 const signer = await provider.getSigner();
                 const client = await createX402Client(signer);
 
-                setStatus('Sending 1 USDC on Base...');
-                const res = await client.fetch('/api/vault/deposit', {
+                setStatus(`Sending ${userAmount} ${tokenLabel} on ${network.name}...`);
+                const res = await client.fetch(depositUrl(networkId), {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-payment-network': networkId,
+                    },
+                    body: JSON.stringify({ amount: userAmount }),
                 });
                 const data = await res.json().catch(() => ({}));
 
@@ -127,16 +447,39 @@
                     return;
                 }
 
-                if (data.vaultTotal != null) {
-                    vaultTotalEl.textContent = `${Number(data.vaultTotal).toFixed(2)} USDC`;
-                } else {
-                    vaultTotalEl.textContent = 'Vault boosted';
+                if (typeof window.applyVaultState === 'function') {
+                    window.applyVaultState(data);
                 }
+                await refreshWalletBalance();
+                setTimeout(() => window.refreshVault?.(), 2500);
                 setStatus(data.message || 'The vault was boosted.');
             } catch (err) {
                 setStatus(err.shortMessage || err.message || 'Boost failed.');
             } finally {
                 boostBtn.disabled = false;
+                boostBtn.textContent = idleLabel;
+            }
+        });
+
+        withdrawBtn?.addEventListener('click', async () => {
+            if (!window.ethereum) {
+                setStatus('Install a browser wallet like MetaMask to withdraw.');
+                return;
+            }
+
+            withdrawBtn.disabled = true;
+            const idleLabel = withdrawBtn.textContent;
+            withdrawBtn.textContent = 'Withdrawing...';
+            setStatus('Connecting wallet...');
+
+            try {
+                const data = await withdrawPrize();
+                setStatus(data.message || 'Withdraw complete.');
+            } catch (err) {
+                setStatus(err.shortMessage || err.message || 'Withdraw failed.');
+            } finally {
+                withdrawBtn.disabled = false;
+                withdrawBtn.textContent = idleLabel;
             }
         });
     </script>

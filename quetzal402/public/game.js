@@ -4,28 +4,195 @@
 * Every keystroke must be logged to an array so the backend can validate the high score later.
 * Use basic geometric shapes (rectangles) for the snake and food for now. */
 
+const NETWORK_STORAGE_KEY = 'quetzal402.network';
 const vaultTotalEl = document.getElementById('vault-total');
 const statusEl = document.getElementById('status');
+const networkSelect = document.getElementById('network-select');
+const networkBadge = document.getElementById('network-badge');
+const boostBtn = document.getElementById('boost-btn');
+
+function getSelectedNetwork() {
+    const saved = localStorage.getItem(NETWORK_STORAGE_KEY);
+    return saved === 'base' ? 'base' : 'base-sepolia';
+}
+
+function readDepositAmount() {
+    const parsed = Number(document.getElementById('deposit-amount')?.value);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+        return 1;
+    }
+    return Math.floor(parsed);
+}
+
+function applyNetworkTheme(networkId) {
+    const isMainnet = networkId === 'base';
+    const amount = readDepositAmount();
+    document.body.dataset.network = networkId;
+    if (networkSelect) {
+        networkSelect.value = networkId;
+    }
+    if (networkBadge) {
+        networkBadge.textContent = isMainnet ? 'Mainnet' : 'Testnet';
+        networkBadge.className = `network-badge ${isMainnet ? 'mainnet' : 'testnet'}`;
+    }
+    if (boostBtn) {
+        boostBtn.textContent = isMainnet
+            ? `Boost Vault (${amount} USDC)`
+            : `Boost Vault (${amount} Testnet USDC)`;
+    }
+}
 
 function setVaultTotal(value) {
     const amount = Number(value);
-    vaultTotalEl.textContent = `${amount.toFixed(2)} USDC`;
+    vaultTotalEl.textContent = `${Number.isFinite(amount) ? amount.toFixed(2) : '0.00'} USDC`;
 }
 
 function setStatus(message) {
     statusEl.textContent = message;
 }
 
+function shortenAddress(address) {
+    if (!address) {
+        return '—';
+    }
+    return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+function applyVaultState(data = {}) {
+    if (data.vaultTotal != null) {
+        setVaultTotal(data.vaultTotal);
+    }
+
+    const currentEl = document.getElementById('current-record');
+    const lastEl = document.getElementById('last-record');
+    const amountEl = document.getElementById('last-amount');
+    const collectorEl = document.getElementById('last-collector');
+    const last = data.lastRecord;
+
+    if (currentEl) {
+        currentEl.textContent = String(data.currentRecord?.score ?? 0);
+    }
+    if (lastEl) {
+        lastEl.textContent = last ? String(last.score) : '—';
+    }
+    if (amountEl) {
+        amountEl.textContent = last && last.amount != null
+            ? `${Number(last.amount).toFixed(2)} USDC`
+            : '—';
+    }
+    if (collectorEl) {
+        collectorEl.textContent = shortenAddress(last?.walletAddress);
+        collectorEl.title = last?.walletAddress || '';
+    }
+
+    const vaultAddressEl = document.getElementById('vault-address');
+    if (vaultAddressEl) {
+        vaultAddressEl.textContent = data.receiver ? shortenAddress(data.receiver) : '';
+        vaultAddressEl.title = data.receiver || '';
+    }
+}
+
 async function loadVault() {
-    const res = await fetch('/api/vault');
+    const network = getSelectedNetwork();
+    const res = await fetch(`/api/vault?network=${encodeURIComponent(network)}`);
     if (!res.ok) {
         throw new Error('Could not load vault total');
     }
     const data = await res.json();
-    setVaultTotal(data.vaultTotal);
+    applyVaultState(data);
+}
+
+window.applyVaultState = applyVaultState;
+window.refreshVault = () => loadVault().catch((err) => setStatus(err.message));
+
+applyNetworkTheme(getSelectedNetwork());
+if (networkSelect) {
+    networkSelect.addEventListener('change', () => {
+        localStorage.setItem(NETWORK_STORAGE_KEY, networkSelect.value);
+        applyNetworkTheme(networkSelect.value);
+        loadVault().catch((err) => setStatus(err.message));
+    });
+}
+const depositAmountInput = document.getElementById('deposit-amount');
+if (depositAmountInput) {
+    depositAmountInput.addEventListener('input', () => {
+        applyNetworkTheme(getSelectedNetwork());
+    });
 }
 
 loadVault().catch((err) => setStatus(err.message));
+
+const overlay = document.getElementById('game-overlay');
+const overlayTitle = document.getElementById('overlay-title');
+const startBtn = document.getElementById('start-btn');
+const restartBtn = document.getElementById('restart-btn');
+
+function showStartOverlay() {
+    overlayTitle.textContent = 'Quetzalcoatl Approaches...';
+    startBtn.hidden = false;
+    restartBtn.hidden = true;
+    overlay.classList.remove('hidden');
+}
+
+function showRestartOverlay() {
+    overlayTitle.textContent = 'Game Over';
+    startBtn.hidden = true;
+    restartBtn.hidden = false;
+    overlay.classList.remove('hidden');
+}
+
+function focusGameCanvas() {
+    startBtn.blur();
+    restartBtn.blur();
+    if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+    }
+    const canvas = document.querySelector('#game canvas');
+    if (canvas) {
+        canvas.setAttribute('tabindex', '0');
+        canvas.focus({ preventScroll: true });
+    }
+}
+
+function hideOverlay() {
+    overlay.classList.add('hidden');
+    focusGameCanvas();
+}
+
+function applyDirection(scene, x, y, key) {
+    if (!scene || !scene.isRunning || scene.isGameOver) {
+        return;
+    }
+    if (scene.nextDirection.x === x && scene.nextDirection.y === y) {
+        return;
+    }
+    if (scene.nextDirection.x + x === 0 && scene.nextDirection.y + y === 0) {
+        return;
+    }
+
+    scene.nextDirection = { x, y };
+    scene.inputLog.push({
+        key,
+        score: scene.score,
+        timestamp: Math.round(scene.time.now),
+    });
+}
+
+window.addEventListener('keydown', (event) => {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) {
+        event.preventDefault();
+    }
+
+    if (event.key === 'ArrowUp') {
+        applyDirection(gameScene, 0, -1, 'UP');
+    } else if (event.key === 'ArrowDown') {
+        applyDirection(gameScene, 0, 1, 'DOWN');
+    } else if (event.key === 'ArrowLeft') {
+        applyDirection(gameScene, -1, 0, 'LEFT');
+    } else if (event.key === 'ArrowRight') {
+        applyDirection(gameScene, 1, 0, 'RIGHT');
+    }
+}, { passive: false });
 
 const config = {
     type: Phaser.AUTO,
@@ -49,6 +216,8 @@ const SNAKE_BODY_COLOR = 0x2e8b57;
 const JADE_COLOR = 0xd4af37;
 const COLS = 640 / TILE;
 const ROWS = 480 / TILE;
+
+let gameScene = null;
 
 function preload() {
     // We will load Quetzalcoatl and Jade Stone assets here later
@@ -75,7 +244,55 @@ function spawnJadeStone(scene) {
     scene.jadeStone.setPosition(x, y);
 }
 
+function createSnake(scene) {
+    const centerX = Math.floor(COLS / 2) * TILE;
+    const centerY = Math.floor(ROWS / 2) * TILE;
+
+    if (scene.snake) {
+        scene.snake.forEach((segment) => segment.destroy());
+    }
+    if (scene.jadeStone) {
+        scene.jadeStone.destroy();
+        scene.jadeStone = null;
+    }
+    if (scene.gameOverText) {
+        scene.gameOverText.destroy();
+        scene.gameOverText = null;
+    }
+
+    scene.direction = { x: 1, y: 0 };
+    scene.nextDirection = { x: 1, y: 0 };
+    scene.moveTimer = 0;
+    scene.inputLog = [];
+    scene.score = 0;
+    scene.isGameOver = false;
+    scene.isRunning = false;
+    scene.snake = [];
+    scene.scoreText.setText('Score: 0');
+
+    for (let i = 0; i < 3; i++) {
+        const segment = scene.add.rectangle(
+            centerX - i * TILE,
+            centerY,
+            TILE,
+            TILE,
+            i === 0 ? SNAKE_HEAD_COLOR : SNAKE_BODY_COLOR,
+        );
+        segment.setOrigin(0, 0);
+        scene.snake.push(segment);
+    }
+
+    spawnJadeStone(scene);
+}
+
+function startRun(scene) {
+    createSnake(scene);
+    scene.isRunning = true;
+    hideOverlay();
+}
+
 function create() {
+    gameScene = this;
     this.scoreText = this.add.text(20, 20, 'Score: 0', {
         fontSize: '20px',
         color: '#d4af37',
@@ -95,56 +312,28 @@ function create() {
     }
 
     graphics.strokePath();
+    this.input.keyboard.addCapture([
+        Phaser.Input.Keyboard.KeyCodes.UP,
+        Phaser.Input.Keyboard.KeyCodes.DOWN,
+        Phaser.Input.Keyboard.KeyCodes.LEFT,
+        Phaser.Input.Keyboard.KeyCodes.RIGHT,
+        Phaser.Input.Keyboard.KeyCodes.SPACE,
+    ]);
 
-    const centerX = Math.floor(COLS / 2) * TILE;
-    const centerY = Math.floor(ROWS / 2) * TILE;
-
-    this.direction = { x: 1, y: 0 };
-    this.nextDirection = { x: 1, y: 0 };
-    this.moveTimer = 0;
-    this.inputLog = [];
-    this.score = 0;
-    this.isGameOver = false;
-    this.snake = [];
-
-    for (let i = 0; i < 3; i++) {
-        const segment = this.add.rectangle(
-            centerX - i * TILE,
-            centerY,
-            TILE,
-            TILE,
-            i === 0 ? SNAKE_HEAD_COLOR : SNAKE_BODY_COLOR,
-        );
-        segment.setOrigin(0, 0);
-        this.snake.push(segment);
-    }
-
-    spawnJadeStone(this);
-
-    const setDirection = (x, y, key) => {
-        if (this.isGameOver) {
-            return;
-        }
-        if (this.nextDirection.x === x && this.nextDirection.y === y) {
-            return;
-        }
-        if (this.nextDirection.x + x === 0 && this.nextDirection.y + y === 0) {
-            return;
-        }
-
-        this.nextDirection = { x, y };
-        this.inputLog.push({
-            key,
-            score: this.score,
-            timestamp: Math.round(this.time.now),
-        });
-    };
-
-    this.input.keyboard.on('keydown-UP', () => setDirection(0, -1, 'UP'));
-    this.input.keyboard.on('keydown-DOWN', () => setDirection(0, 1, 'DOWN'));
-    this.input.keyboard.on('keydown-LEFT', () => setDirection(-1, 0, 'LEFT'));
-    this.input.keyboard.on('keydown-RIGHT', () => setDirection(1, 0, 'RIGHT'));
+    createSnake(this);
 }
+
+startBtn.addEventListener('click', () => {
+    if (gameScene) {
+        startRun(gameScene);
+    }
+});
+
+restartBtn.addEventListener('click', () => {
+    if (gameScene) {
+        startRun(gameScene);
+    }
+});
 
 async function submitScore(walletAddress, score, inputLog) {
     const res = await fetch('/api/score/submit', {
@@ -154,34 +343,46 @@ async function submitScore(walletAddress, score, inputLog) {
             walletAddress,
             score,
             inputLog,
+            network: getSelectedNetwork(),
         }),
     });
     const data = await res.json().catch(() => ({}));
-    window.alert(data.message || `Score submit failed (${res.status})`);
+    applyVaultState(data);
+    return data;
 }
 
-function triggerGameOver(scene) {
+async function triggerGameOver(scene) {
     if (scene.isGameOver) {
         return;
     }
 
     scene.isGameOver = true;
-    scene.add.text(320, 240, 'Game Over', {
+    scene.isRunning = false;
+    scene.gameOverText = scene.add.text(320, 240, 'Game Over', {
         fontSize: '40px',
         color: '#d4af37',
     }).setOrigin(0.5);
+    showRestartOverlay();
 
-    const walletAddress = window.prompt(
-        'Enter your USDC Receiving Address to claim the prize if you win:',
-    );
-
-    submitScore(walletAddress, scene.score, scene.inputLog).catch((err) => {
-        window.alert(err.message || 'Could not submit score.');
-    });
+    try {
+        if (typeof window.getConnectedWallet !== 'function') {
+            throw new Error('Wallet is not ready. Refresh and connect MetaMask.');
+        }
+        const walletAddress = await window.getConnectedWallet({ request: true });
+        const data = await submitScore(walletAddress, scene.score, scene.inputLog);
+        if (data.claimed && typeof window.withdrawPrize === 'function') {
+            const withdraw = await window.withdrawPrize();
+            window.alert(withdraw?.message || data.message || 'Record claimed.');
+            return;
+        }
+        window.alert(data.message || `Score submit failed.`);
+    } catch (err) {
+        window.alert(err.shortMessage || err.message || 'Could not submit score.');
+    }
 }
 
 function update(time, delta) {
-    if (this.isGameOver) {
+    if (!this.isRunning || this.isGameOver) {
         return;
     }
 
