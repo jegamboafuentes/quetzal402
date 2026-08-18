@@ -604,7 +604,7 @@ async function main() {
     });
   });
 
-  app.listen(PORT, () => {
+  app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`Quetzal402 Vault Server running on port ${PORT}`);
     if (payToEvmAddress) {
       console.log(`Receiving USDC at ${payToEvmAddress} on Base and Base Sepolia`);
