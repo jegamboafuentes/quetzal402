@@ -17,6 +17,7 @@
 
 
 For more info, I wrote a Medium post about this project here: [Link](https://jegamboafuentes.medium.com/reinventing-http-402-how-i-built-an-on-chain-arcade-game-on-base-a319533003a7)
+
 **Play the game here:** [https://quetzal402.metaverseprofessional.tech/](https://quetzal402.metaverseprofessional.tech/) 
 
 <div align="center">
